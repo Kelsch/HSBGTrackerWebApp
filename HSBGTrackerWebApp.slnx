@@ -1,5 +1,5 @@
 <Solution>
-  <Project Path="../HSBGTracker/HSBGTracker.Core/HSBGTracker.Core.csproj" />
+  <Project Path="HSBGTracker.Core/HSBGTracker.Core.csproj" />
   <Project Path="HSBGTrackerWebApp.ApiService/HSBGTrackerWebApp.ApiService.csproj" />
   <Project Path="HSBGTrackerWebApp.AppHost/HSBGTrackerWebApp.AppHost.csproj" />
   <Project Path="HSBGTrackerWebApp.ServiceDefaults/HSBGTrackerWebApp.ServiceDefaults.csproj" />
