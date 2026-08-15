@@ -29,7 +29,7 @@ public static class SnapshotMapper
             PlayerId = playerId,
             HeroCardId = player.HeroCardId,
             HeroPower = heroPower is null ? null : ToHeroPowerSnapshot(heroPower),
-            TavernTier = player.TavernTier,
+            TavernTier = state.ResolveTavernTier(playerId),
             Minions = board.Select(m => ToMinionSnapshot(m, byHost[m.Id])).ToList(),
             Trinkets = trinkets.Select(t => ToTrinketSnapshot(t, byHost[t.Id], cardDb)).ToList(),
         };

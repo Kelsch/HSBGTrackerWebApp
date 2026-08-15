@@ -33,7 +33,11 @@ public sealed class GameStateApplier
                         entity.CardId = full.CardId;
 
                     foreach (var (tagName, rawValue) in full.Tags)
+                    {
                         ApplyTag(entity, tagName, rawValue);
+                    }
+
+                    MaybeCaptureTavernTier(entity);
 
                     if (entity.AttachedToEntityId != 0
                         && _state.Entities.TryGetValue(entity.AttachedToEntityId, out var host)
@@ -66,7 +70,11 @@ public sealed class GameStateApplier
                         entity.CardId = show.CardId;
 
                     foreach (var (tagName, rawValue) in show.Tags)
+                    {
                         ApplyTag(entity, tagName, rawValue);
+                    }
+
+                    MaybeCaptureTavernTier(entity);
 
                     if (entity.AttachedToEntityId != 0
                         && _state.Entities.TryGetValue(entity.AttachedToEntityId, out var host)
@@ -138,6 +146,13 @@ public sealed class GameStateApplier
 
                     var ownerPlayerId = ResolveOwnerPlayerId(entity, tagChange.Entity);
 
+                    if (tagChange.TagName == nameof(GameTag.PLAYER_TECH_LEVEL)
+                        && int.TryParse(tagChange.RawValue, out var tavernTier)
+                        && ownerPlayerId != 0)
+                    {
+                        _state.NotifyTavernTierChanged(ownerPlayerId, tavernTier);
+                    }
+
                     if (tagChange.TagName == nameof(GameTag.PLAYER_LEADERBOARD_PLACE)
                         && int.TryParse(tagChange.RawValue, out var place)
                         && ownerPlayerId != 0)
@@ -164,16 +179,43 @@ public sealed class GameStateApplier
     private int ResolveOwnerPlayerId(Entity entity, EntityRef entityRef)
     {
         if (entity.ControllerPlayerId != 0)
+        {
             return entity.ControllerPlayerId;
+        }
 
         if (entityRef.PlayerId is int bracket)
+        {
             return bracket;
+        }
 
         // Player entity itself: CONTROLLER was set from PlayerMappingPacket to PlayerID.
         if (_state.TranslateControllerEntityId(entity.Id) is int mapped)
+        {
             return mapped;
+        }
 
         return 0;
+    }
+
+    private void MaybeCaptureTavernTier(Entity entity)
+    {
+        var tier = entity.GetTag(GameTag.PLAYER_TECH_LEVEL);
+        if (tier <= 0)
+        {
+            return;
+        }
+
+        var playerId = entity.ControllerPlayerId;
+        if (playerId == 0)
+        {
+            playerId = _state.TranslateControllerEntityId(entity.Id) ?? 0;
+        }
+        if (playerId == 0)
+        {
+            return;
+        }
+
+        _state.NotifyTavernTierChanged(playerId, tier);
     }
 
     /// <summary>
@@ -184,14 +226,20 @@ public sealed class GameStateApplier
     private int? ResolveId(EntityRef entityRef)
     {
         if (entityRef.Id is int id)
+        {
             return id;
+        }
 
-        if (!entityRef.IsNamedToken)
+        if (entityRef.IsNamedToken == false)
+        {
             return null;
+        }
 
         // Already learned?
         if (_state.ResolvePlayerEntityIdByName(entityRef.RawToken) is int known)
+        {
             return known;
+        }
 
         var token = entityRef.RawToken;
 
@@ -216,7 +264,10 @@ public sealed class GameStateApplier
             int? targetPlayerId = _state.FriendlyPlayerId;
             foreach (var (entityId, playerId) in GetPlayerMappings())
             {
-                if (playerId == 10) continue;
+                if (playerId == 10)
+                {
+                    continue;
+                }
                 if (targetPlayerId is null || playerId == targetPlayerId)
                 {
                     _state.RegisterPlayerName(token, entityId);
@@ -234,14 +285,18 @@ public sealed class GameStateApplier
         foreach (var entity in _state.Entities.Values)
         {
             if (entity.CardType == CardType.PLAYER && entity.ControllerPlayerId != 0)
+            {
                 yield return (entity.Id, entity.ControllerPlayerId);
+            }
         }
     }
 
     private static int? ParsePlaystate(string rawValue)
     {
         if (int.TryParse(rawValue, out var n))
+        {
             return n;
+        }
 
         // Named values as they appear in Power.log.
         return rawValue.ToUpperInvariant() switch
@@ -260,7 +315,7 @@ public sealed class GameStateApplier
 
     private static void ApplyTag(Entity entity, string tagName, string rawValue)
     {
-        if (!int.TryParse(rawValue, out var numericValue))
+        if (int.TryParse(rawValue, out var numericValue) == false)
         {
             // Named enums for a few non-numeric values
             if (tagName.Equals(nameof(GameTag.ZONE), StringComparison.OrdinalIgnoreCase)
@@ -296,6 +351,8 @@ public sealed class GameStateApplier
         entity.SetExtraTag(tagName, numericValue);
 
         if (Enum.TryParse<GameTag>(tagName, out var tag))
+        {
             entity.SetTag(tag, numericValue);
+        }
     }
 }

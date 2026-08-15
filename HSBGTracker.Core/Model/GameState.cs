@@ -138,6 +138,59 @@ public sealed class GameState
         Entities.Values.FirstOrDefault(e => e.ControllerPlayerId == playerId && e.CardType == CardType.HERO_POWER);
 
     /// <summary>
+    /// PLAYER_TECH_LEVEL on the player or hero entity. Tavern never goes down, so keep the high-water mark
+    /// in case end-of-game cleanup writes a 0.
+    /// </summary>
+    public void NotifyTavernTierChanged(int playerId, int tier)
+    {
+        if (playerId == 0 || playerId == 10)
+        {
+            return;
+        }
+        if (tier <= 0)
+        {
+            return;
+        }
+
+        var player = GetOrCreatePlayer(playerId);
+        if (tier > player.TavernTier)
+        {
+            player.TavernTier = tier;
+        }
+    }
+
+    /// <summary>Best-effort read if PlayerState was never updated (tag lived only on an entity).</summary>
+    public int ResolveTavernTier(int playerId)
+    {
+        var player = GetOrCreatePlayer(playerId);
+        if (player.TavernTier > 0)
+        {
+            return player.TavernTier;
+        }
+
+        var fromEntities = 0;
+        foreach (var e in Entities.Values)
+        {
+            if (e.ControllerPlayerId != playerId && TranslateControllerEntityId(e.Id) != playerId)
+            {
+                continue;
+            }
+            if (e.CardType is not (CardType.PLAYER or CardType.HERO))
+            {
+                continue;
+            }
+
+            var tier = e.GetTag(GameTag.PLAYER_TECH_LEVEL);
+            if (tier > fromEntities)
+            {
+                fromEntities = tier;
+            }
+        }
+
+        return fromEntities;
+    }
+
+    /// <summary>
     /// While alive this is current standing (noisy). After the run ends, BG often
     /// still writes the final place a moment later - keep accepting those updates.
     /// </summary>
