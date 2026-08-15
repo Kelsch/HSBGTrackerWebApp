@@ -1,17 +1,13 @@
-﻿<div class="minion-portrait @CssClasses @(IsSelected ? "selected" : null)" @onclick="OnClick">
+﻿@* Components/MinionPortrait.razor *@
+
+<div class="minion-portrait @CssClasses @(IsSelected ? "selected" : null)" @onclick="OnClick">
     <div class="frame-wrapper">
         <svg class="frame-svg" viewBox="0 0 140 160" xmlns="http://www.w3.org/2000/svg">
             <defs>
                 <clipPath id="clip-@UniqueId">
                     @if (HasTaunt)
                     {
-                        @* Flatter top shield *@
-                        <path d="M28 18
-                        L112 18
-                        L124 68
-                        C124 108, 100 140, 70 154
-                        C40 140, 16 108, 16 68
-                        Z" />
+                        <path d="@ShieldPath" />
                     }
                     else
                     {
@@ -19,51 +15,144 @@
                     }
                 </clipPath>
 
-                <filter id="glow-divine" x="-50%" y="-50%" width="200%" height="200%">
-                    <feGaussianBlur stdDeviation="5" result="blur" />
+                <radialGradient id="vignette-@UniqueId" cx="50%" cy="45%" r="65%">
+                    <stop offset="60%" stop-color="#000" stop-opacity="0" />
+                    <stop offset="100%" stop-color="#000" stop-opacity="0.55" />
+                </radialGradient>
+
+                <linearGradient id="silverMain-@UniqueId" x1="0" y1="0" x2="1" y2="1">
+                    <stop offset="0%" stop-color="#1b1c1e" /><stop offset="16%" stop-color="#4a4d52" />
+                    <stop offset="36%" stop-color="#868b91" /><stop offset="50%" stop-color="#e6e8eb" />
+                    <stop offset="66%" stop-color="#9aa0a6" /><stop offset="86%" stop-color="#45484c" />
+                    <stop offset="100%" stop-color="#131415" />
+                </linearGradient>
+                <linearGradient id="silverHi-@UniqueId" x1="0" y1="0" x2="1" y2="1">
+                    <stop offset="0%" stop-color="#ffffff" />
+                    <stop offset="50%" stop-color="#d2d5d9" stop-opacity="0.9" />
+                    <stop offset="100%" stop-color="#6c7075" stop-opacity="0.6" />
+                </linearGradient>
+
+                <linearGradient id="steelMain-@UniqueId" x1="0" y1="0" x2="1" y2="1">
+                    <stop offset="0%" stop-color="#0d1216" /><stop offset="16%" stop-color="#33424c" />
+                    <stop offset="36%" stop-color="#66808e" /><stop offset="50%" stop-color="#dbe8ee" />
+                    <stop offset="66%" stop-color="#7f95a3" /><stop offset="86%" stop-color="#2f3a41" />
+                    <stop offset="100%" stop-color="#0a0d0f" />
+                </linearGradient>
+                <linearGradient id="steelHi-@UniqueId" x1="0" y1="0" x2="1" y2="1">
+                    <stop offset="0%" stop-color="#f2fbff" />
+                    <stop offset="50%" stop-color="#bcd6e0" stop-opacity="0.9" />
+                    <stop offset="100%" stop-color="#5a747f" stop-opacity="0.6" />
+                </linearGradient>
+
+                <linearGradient id="goldMain-@UniqueId" x1="0" y1="0" x2="1" y2="1">
+                    <stop offset="0%" stop-color="#3d2705" /><stop offset="14%" stop-color="#8a5c0c" />
+                    <stop offset="34%" stop-color="#d9a637" /><stop offset="50%" stop-color="#fff6d8" />
+                    <stop offset="66%" stop-color="#eec25a" /><stop offset="86%" stop-color="#7a5209" />
+                    <stop offset="100%" stop-color="#2e1c02" />
+                </linearGradient>
+                <linearGradient id="goldHi-@UniqueId" x1="0" y1="0" x2="1" y2="1">
+                    <stop offset="0%" stop-color="#fffceb" />
+                    <stop offset="50%" stop-color="#ffe9a3" stop-opacity="0.95" />
+                    <stop offset="100%" stop-color="#b3860f" stop-opacity="0.7" />
+                </linearGradient>
+
+                <radialGradient id="gemSteel-@UniqueId" cx="35%" cy="30%" r="75%">
+                    <stop offset="0%" stop-color="#eaf3fa" /><stop offset="45%" stop-color="#8fa5b8" />
+                    <stop offset="100%" stop-color="#16232c" />
+                </radialGradient>
+                <radialGradient id="gemGold-@UniqueId" cx="35%" cy="30%" r="75%">
+                    <stop offset="0%" stop-color="#fff6d8" /><stop offset="45%" stop-color="#ffce54" />
+                    <stop offset="100%" stop-color="#6b4405" />
+                </radialGradient>
+
+                <filter id="glow-divine-@UniqueId" x="-60%" y="-60%" width="220%" height="220%">
+                    <feGaussianBlur stdDeviation="4" result="blur1" />
+                    <feGaussianBlur in="blur1" stdDeviation="8" result="blur2" />
                     <feMerge>
-                        <feMergeNode in="blur" />
-                        <feMergeNode in="SourceGraphic" />
+                        <feMergeNode in="blur2" /><feMergeNode in="blur1" /><feMergeNode in="SourceGraphic" />
                     </feMerge>
+                </filter>
+
+                <filter id="soft-shadow-@UniqueId" x="-40%" y="-40%" width="180%" height="180%">
+                    <feDropShadow dx="0" dy="2" stdDeviation="2.2" flood-color="#000" flood-opacity="0.65" />
                 </filter>
             </defs>
 
-            @* Larger image = less empty space *@
-            <image href="@PortraitUrl"
-                   x="12" y="10"
-                   width="116" height="140"
-                   clip-path="url(#clip-@UniqueId)"
-                   preserveAspectRatio="xMidYMid slice" />
-
-            @* Border *@
+            @* Portrait art, clipped and vignetted. The clip stays fixed to the frame
+               shape; the image inside it is zoomed in around the frame center, since
+               source art usually has more breathing room than the frame wants. Tune
+               PortraitZoom per-minion if a specific piece of art still sits awkwardly. *@
+            <g clip-path="url(#clip-@UniqueId)">
+                <g transform="translate(70 80) scale(@PortraitZoom.ToString(System.Globalization.CultureInfo.InvariantCulture)) translate(-70 -80)">
+                    <image href="@PortraitUrl"
+                           x="12" y="10"
+                           width="116" height="140"
+                           preserveAspectRatio="xMidYMid slice" />
+                </g>
+            </g>
             @if (HasTaunt)
             {
-                <path class="frame-shape shield"
-                      d="M28 18
-                L112 18
-                L124 68
-                C124 108, 100 140, 70 154
-                C40 140, 16 108, 16 68
-                Z" />
+                <path d="@ShieldPath" fill="url(#vignette-@UniqueId)" opacity="0.55" />
             }
             else
             {
-                <ellipse class="frame-shape oval"
-                         cx="70" cy="80" rx="54" ry="66" />
+                <ellipse cx="70" cy="80" rx="54" ry="66" fill="url(#vignette-@UniqueId)" opacity="0.55" />
             }
 
             @if (HasDivineShield)
             {
-                <ellipse class="divine-bubble"
-                         cx="70" cy="80" rx="62" ry="74" />
+                <ellipse cx="70" cy="80" rx="64" ry="76"
+                         fill="rgba(125,211,252,0.12)" stroke="rgba(56,189,248,0.7)" stroke-width="2.4"
+                         filter="url(#glow-divine-@UniqueId)" />
+                <ellipse cx="70" cy="80" rx="70" ry="82" fill="none"
+                         stroke="rgba(186,230,253,0.35)" stroke-width="1" stroke-dasharray="2 5" />
             }
-        </svg>
-    </div>
 
-    <div class="stats">
-        <span class="atk">@Format(Attack)</span>
-        <span class="sep">/</span>
-        <span class="hp">@Format(Health)</span>
+            @* Ornate beveled border: outer metal band + inner highlight line + dark outer rim *@
+            @if (HasTaunt)
+            {
+                <path class="frame-outer" d="@ShieldPath" fill="none" stroke="url(#@MainGradId)" stroke-width="11" stroke-linejoin="round" />
+                <path class="frame-hi" d="@ShieldPath" transform="translate(70 85) scale(0.94) translate(-70 -85)"
+                      fill="none" stroke="url(#@HiGradId)" stroke-width="2.2" stroke-linejoin="round" opacity="0.85" />
+                <path d="@ShieldPath" transform="translate(70 85) scale(1.03) translate(-70 -85)"
+                      fill="none" stroke="#0c0a07" stroke-width="1.4" stroke-linejoin="round" opacity="0.9" />
+            }
+            else
+            {
+                <ellipse class="frame-outer" cx="70" cy="80" rx="54" ry="66" fill="none" stroke="url(#@MainGradId)" stroke-width="11" />
+                <ellipse class="frame-hi" cx="70" cy="80" rx="49.5" ry="61.5" fill="none" stroke="url(#@HiGradId)" stroke-width="2.2" opacity="0.85" />
+                <ellipse cx="70" cy="80" rx="58" ry="70" fill="none" stroke="#0c0a07" stroke-width="1.4" opacity="0.9" />
+            }
+
+            @* Rivets *@
+            @foreach (var (x, y) in RivetPositions)
+            {
+                <circle cx="@x" cy="@y" r="4.4" fill="url(#@GemGradId)" stroke="#0c0a07" stroke-width="1" />
+            }
+
+            @* Signature top-center faceted gem *@
+            <g transform="translate(70 @(HasTaunt ? 15 : 11))" filter="url(#soft-shadow-@UniqueId)">
+                <path d="M0 -8 L7 0 L0 8 L-7 0 Z" fill="url(#@MainGradId)" stroke="#0c0a07" stroke-width="1" />
+                <path d="M0 -8 L7 0 L0 0 Z" fill="url(#@GemGradId)" opacity="0.9" />
+                <path d="M0 -8 L-7 0 L0 0 Z" fill="url(#@GemGradId)" opacity="0.55" />
+            </g>
+        </svg>
+
+        @if (IsGolden)
+        {
+            <div class="spark s1"></div>
+            <div class="spark s2"></div>
+            <div class="spark s3"></div>
+        }
+
+        <div class="stat-badge atk">
+            <div class="badge-rim"></div>
+            <div class="badge-face"><div class="badge-gem"></div><span>@Format(Attack)</span></div>
+        </div>
+        <div class="stat-badge hp">
+            <div class="badge-rim"></div>
+            <div class="badge-face"><div class="badge-gem"></div><span>@Format(Health)</span></div>
+        </div>
     </div>
 </div>
 
@@ -75,12 +164,24 @@
     [Parameter] public bool IsGolden { get; set; }
     [Parameter] public bool HasTaunt { get; set; }
     [Parameter] public bool HasDivineShield { get; set; }
+    [Parameter] public double PortraitZoom { get; set; } = 1;
 
     [Parameter] public bool IsSelected { get; set; }
     [Parameter] public EventCallback OnClick { get; set; }
 
-    // Needed so multiple instances on the page don't share the same clipPath id
+    // Needed so multiple instances on the page don't share the same SVG def ids
     private string UniqueId { get; } = Guid.NewGuid().ToString("N")[..8];
+
+    private const string ShieldPath =
+        "M28 18 L112 18 L124 68 C124 108, 100 140, 70 154 C40 140, 16 108, 16 68 Z";
+
+    private string MainGradId => IsGolden ? $"goldMain-{UniqueId}" : (HasTaunt ? $"steelMain-{UniqueId}" : $"silverMain-{UniqueId}");
+    private string HiGradId => IsGolden ? $"goldHi-{UniqueId}" : (HasTaunt ? $"steelHi-{UniqueId}" : $"silverHi-{UniqueId}");
+    private string GemGradId => IsGolden ? $"gemGold-{UniqueId}" : $"gemSteel-{UniqueId}";
+
+    private IEnumerable<(int x, int y)> RivetPositions => HasTaunt
+        ? new[] { (28, 20), (112, 20), (70, 150) }
+        : new[] { (35, 26), (105, 26), (35, 134), (105, 134) };
 
     private string CssClasses
     {

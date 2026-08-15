@@ -2,7 +2,10 @@
     display: flex;
     flex-direction: column;
     align-items: center;
-    width: 124px;
+    width: 100%; /* fill whatever width the layout gives it — sized by the parent's grid */
+    max-width: 190px; /* keeps a lone minion on a sparse board from ballooning */
+    margin: 0 auto;
+    container-type: inline-size; /* lets badges/sparks below scale with actual rendered width via cqw */
     cursor: pointer;
     transition: transform 0.15s ease;
 }
@@ -15,13 +18,14 @@
         transform: translateY(-4px);
     }
 
-        .minion-portrait.selected .frame-shape {
-            stroke-width: 7;
+        .minion-portrait.selected .frame-outer {
+            stroke-width: 13;
         }
 
 .frame-wrapper {
-    width: 114px;
-    height: 132px;
+    position: relative;
+    width: 100%;
+    aspect-ratio: 122 / 138;
 }
 
 .frame-svg {
@@ -30,48 +34,124 @@
     overflow: visible;
 }
 
-/* ===== Base grey border ===== */
-.frame-shape {
-    fill: none;
-    stroke: #6b7280;
-    stroke-width: 5;
-    stroke-linejoin: round;
+/* ===== Stat badges: riveted hexagonal plates ===== */
+/* Sized in cqw (% of .minion-portrait's own rendered width) so they scale
+   correctly whether the grid gives this card 90px or 190px, with no JS. */
+.stat-badge {
+    position: absolute;
+    width: 29cqw;
+    height: 29cqw;
+    bottom: -4cqw;
+    filter: drop-shadow(0 3px 3px rgba(0, 0, 0, .75));
 }
 
-.minion-portrait.golden .frame-shape {
-    stroke: #e6b422;
-    stroke-width: 5.5px;
+    .stat-badge.atk {
+        left: -2.5cqw;
+    }
+
+    .stat-badge.hp {
+        right: -2.5cqw;
+    }
+
+.badge-rim, .badge-face {
+    position: absolute;
+    inset: 0;
+    clip-path: polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%);
 }
 
-.minion-portrait.taunt .frame-shape {
-    stroke-width: 6px;
+.badge-rim {
+    background: linear-gradient(155deg, var(--rim-hi), var(--rim-mid) 45%, var(--rim-dark) 100%);
 }
 
-.minion-portrait.taunt:not(.golden) .frame-shape {
-    stroke: #4b5563;
-}
-
-/* ===== Divine Shield bubble ===== */
-.divine-bubble {
-    fill: rgba(125, 211, 252, 0.15);
-    stroke: rgba(56, 189, 248, 0.65);
-    stroke-width: 2.5px;
-    filter: url(#glow-divine);
-}
-
-/* ===== Stats ===== */
-.minion-portrait .stats {
-    margin-top: 4px;
+.badge-face {
+    inset: 3px;
+    background: radial-gradient(circle at 50% 30%, #3a2c1c 0%, #171310 70%, #0a0806 100%);
     display: flex;
-    align-items: baseline;
-    gap: 2px;
-    font-weight: 800;
-    font-size: 1.1rem;
-    color: #e8f5e9;
-    text-shadow: 0 1px 3px rgba(0, 0, 0, 0.9);
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
 }
 
-.minion-portrait .sep {
-    opacity: 0.5;
-    font-weight: 600;
+.badge-gem {
+    width: 9px;
+    height: 9px;
+    border-radius: 50%;
+    margin-bottom: 1px;
+}
+
+.atk .badge-gem {
+    background: radial-gradient(circle at 35% 30%, #fff3c9, #e0912b 55%, #5c3706 100%);
+}
+
+.hp .badge-gem {
+    background: radial-gradient(circle at 35% 30%, #ffd6d6, #c53030 55%, #4a0f0f 100%);
+}
+
+.badge-face span {
+    color: #fbf3e2;
+    font-weight: 800;
+    font-size: clamp(0.62rem, 5.8cqw, 1rem);
+    line-height: 1;
+    text-shadow: 0 1px 2px #000;
+}
+
+/* variant rim colors — mirror the SVG frame's metal */
+.minion-portrait {
+    --rim-hi: #e6e8eb;
+    --rim-mid: #868b91;
+    --rim-dark: #1b1c1e;
+}
+
+    .minion-portrait.golden {
+        --rim-hi: #fff6d8;
+        --rim-mid: #d9a637;
+        --rim-dark: #4a2f05;
+    }
+
+    .minion-portrait.taunt:not(.golden) {
+        --rim-hi: #dbe8ee;
+        --rim-mid: #7f95a3;
+        --rim-dark: #10151a;
+    }
+
+/* ===== Sparkle flecks for golden minions ===== */
+.spark {
+    position: absolute;
+    width: 6px;
+    height: 6px;
+    background: radial-gradient(circle, #fff8dd 0%, #ffdf7e 55%, transparent 75%);
+    clip-path: polygon(50% 0%, 61% 39%, 100% 50%, 61% 61%, 50% 100%, 39% 61%, 0% 50%, 39% 39%);
+    animation: twinkle 2.4s ease-in-out infinite;
+    opacity: 0;
+    pointer-events: none;
+}
+
+    .spark.s1 {
+        top: 6px;
+        left: -2px;
+        animation-delay: 0s;
+    }
+
+    .spark.s2 {
+        top: 60px;
+        right: -4px;
+        animation-delay: .8s;
+    }
+
+    .spark.s3 {
+        bottom: 18px;
+        left: 8px;
+        animation-delay: 1.5s;
+    }
+
+@keyframes twinkle {
+    0%, 100% {
+        opacity: 0;
+        transform: scale(0.4) rotate(0deg);
+    }
+
+    50% {
+        opacity: 1;
+        transform: scale(1) rotate(25deg);
+    }
 }

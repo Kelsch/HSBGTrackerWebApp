@@ -1,9 +1,9 @@
-﻿/* Desktop – bigger minions, nicer spacing */
+﻿/* Desktop – minions stretch to fill the card's width, however many there are */
 .minion-row {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 1.1rem;
-    justify-content: flex-start;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(78px, 1fr));
+    align-items: end; /* keeps stat badges aligned even as card heights vary slightly */
+    gap: 1.4rem 1.1rem;
 }
 
 .matchup {
@@ -27,16 +27,20 @@
     }
 }
 
-/* Mobile */
+/* Mobile — a fluid grid gets cramped fast with 7 minions, so switch to a
+   fixed-size horizontal scroll instead of shrinking everyone to fit */
 @media (max-width: 700px) {
     .minion-row {
-        gap: 0.75rem;
-        overflow-x: auto;
-        padding-bottom: 0.5rem;
+        display: flex;
         flex-wrap: nowrap;
+        overflow-x: auto;
+        gap: 0.75rem;
+        padding-bottom: 0.5rem;
     }
 
     .minion-portrait {
+        width: 96px;
+        max-width: 96px;
         flex: 0 0 auto;
     }
 
@@ -44,4 +48,3 @@
         padding: 1rem;
     }
 }
-
