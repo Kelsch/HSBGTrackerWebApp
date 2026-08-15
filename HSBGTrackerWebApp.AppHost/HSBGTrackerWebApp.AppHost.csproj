@@ -1,0 +1,16 @@
+<Project Sdk="Aspire.AppHost.Sdk/13.2.4">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <UserSecretsId>83621eb5-ee02-45eb-974e-c4981cf4b699</UserSecretsId>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\HSBGTrackerWebApp.ApiService\HSBGTrackerWebApp.ApiService.csproj" />
+    <ProjectReference Include="..\HSBGTrackerWebApp.Web\HSBGTrackerWebApp.Web.csproj" />
+  </ItemGroup>
+
+</Project>

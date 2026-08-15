@@ -1,0 +1,99 @@
+﻿<div class="minion-portrait @CssClasses @(IsSelected ? "selected" : null)" @onclick="OnClick">
+    <div class="frame-wrapper">
+        <svg class="frame-svg" viewBox="0 0 140 160" xmlns="http://www.w3.org/2000/svg">
+            <defs>
+                <clipPath id="clip-@UniqueId">
+                    @if (HasTaunt)
+                    {
+                        @* Flatter top shield *@
+                        <path d="M28 18
+                        L112 18
+                        L124 68
+                        C124 108, 100 140, 70 154
+                        C40 140, 16 108, 16 68
+                        Z" />
+                    }
+                    else
+                    {
+                        <ellipse cx="70" cy="80" rx="54" ry="66" />
+                    }
+                </clipPath>
+
+                <filter id="glow-divine" x="-50%" y="-50%" width="200%" height="200%">
+                    <feGaussianBlur stdDeviation="5" result="blur" />
+                    <feMerge>
+                        <feMergeNode in="blur" />
+                        <feMergeNode in="SourceGraphic" />
+                    </feMerge>
+                </filter>
+            </defs>
+
+            @* Larger image = less empty space *@
+            <image href="@PortraitUrl"
+                   x="12" y="10"
+                   width="116" height="140"
+                   clip-path="url(#clip-@UniqueId)"
+                   preserveAspectRatio="xMidYMid slice" />
+
+            @* Border *@
+            @if (HasTaunt)
+            {
+                <path class="frame-shape shield"
+                      d="M28 18
+                L112 18
+                L124 68
+                C124 108, 100 140, 70 154
+                C40 140, 16 108, 16 68
+                Z" />
+            }
+            else
+            {
+                <ellipse class="frame-shape oval"
+                         cx="70" cy="80" rx="54" ry="66" />
+            }
+
+            @if (HasDivineShield)
+            {
+                <ellipse class="divine-bubble"
+                         cx="70" cy="80" rx="62" ry="74" />
+            }
+        </svg>
+    </div>
+
+    <div class="stats">
+        <span class="atk">@Format(Attack)</span>
+        <span class="sep">/</span>
+        <span class="hp">@Format(Health)</span>
+    </div>
+</div>
+
+@code {
+    [Parameter] public string? PortraitUrl { get; set; }
+    [Parameter] public string Name { get; set; } = "";
+    [Parameter] public int Attack { get; set; }
+    [Parameter] public int Health { get; set; }
+    [Parameter] public bool IsGolden { get; set; }
+    [Parameter] public bool HasTaunt { get; set; }
+    [Parameter] public bool HasDivineShield { get; set; }
+
+    [Parameter] public bool IsSelected { get; set; }
+    [Parameter] public EventCallback OnClick { get; set; }
+
+    // Needed so multiple instances on the page don't share the same clipPath id
+    private string UniqueId { get; } = Guid.NewGuid().ToString("N")[..8];
+
+    private string CssClasses
+    {
+        get
+        {
+            var list = new List<string>();
+            if (IsGolden) list.Add("golden");
+            if (HasTaunt) list.Add("taunt");
+            if (HasDivineShield) list.Add("divine-shield");
+            return string.Join(" ", list);
+        }
+    }
+
+    private static string Format(int value) =>
+        value >= 1000 ? $"{value / 1000.0:0.#}k" : value.ToString();
+}

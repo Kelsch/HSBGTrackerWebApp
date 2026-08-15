@@ -1,0 +1,122 @@
+@page "/connect"
+@inject GamesApiClient Api
+@inject AuthSessionState Session
+@inject NavigationManager Nav
+
+<div class="connect-page">
+    <h1>Connect to the ledger</h1>
+
+    @if (Session.IsConnected)
+    {
+        <div class="empty-state">
+            <p class="empty-state-title">You're connected as @Session.DisplayName.</p>
+            <p><a href="/">Go to the feed</a>.</p>
+        </div>
+    }
+    else
+    {
+        <section class="connect-panel">
+            <h2>Already have a key?</h2>
+            <div class="connect-form">
+                <input type="password" placeholder="Paste your API key" @bind="_apiKeyInput" />
+                <button @onclick="ConnectAsync" disabled="@_connecting">Connect</button>
+            </div>
+            @if (_connectError is not null)
+            {
+                <p class="form-error">@_connectError</p>
+            }
+        </section>
+
+        <section class="connect-panel">
+            <h2>New here?</h2>
+            <div class="connect-form connect-form-register">
+                <input type="text" placeholder="Display name" @bind="_displayName" />
+                <input type="text" placeholder="BattleTag (optional - links you as an opponent)" @bind="_battleTag" />
+                <button @onclick="RegisterAsync" disabled="@_registering">Create account</button>
+            </div>
+            @if (_registerError is not null)
+            {
+                <p class="form-error">@_registerError</p>
+            }
+            @if (_issuedApiKey is not null)
+            {
+                <div class="issued-key-box">
+                    <p class="issued-key-warning">Save this now - it won't be shown again.</p>
+                    <code class="issued-key">@_issuedApiKey</code>
+                    <button @onclick="UseIssuedKeyAsync">Use this key now</button>
+                </div>
+            }
+        </section>
+    }
+</div>
+
+@code {
+    private string _apiKeyInput = "";
+    private string _displayName = "";
+    private string _battleTag = "";
+
+    private bool _connecting;
+    private bool _registering;
+    private string? _connectError;
+    private string? _registerError;
+    private string? _issuedApiKey;
+
+    private async Task ConnectAsync() => await TryConnectAsync(_apiKeyInput);
+
+    private async Task RegisterAsync()
+    {
+        _registerError = null;
+        if (string.IsNullOrWhiteSpace(_displayName))
+        {
+            _registerError = "Enter a display name first.";
+            return;
+        }
+
+        _registering = true;
+        var result = await Api.RegisterAsync(new RegisterUserRequest
+        {
+            DisplayName = _displayName.Trim(),
+            BattleTag = string.IsNullOrWhiteSpace(_battleTag) ? null : _battleTag.Trim(),
+        });
+        _registering = false;
+
+        if (result is null)
+        {
+            _registerError = "Couldn't create the account - try again.";
+            return;
+        }
+
+        _issuedApiKey = result.ApiKey;
+    }
+
+    private async Task UseIssuedKeyAsync()
+    {
+        if (_issuedApiKey is not null)
+        {
+            await TryConnectAsync(_issuedApiKey);
+        }
+    }
+
+    private async Task TryConnectAsync(string apiKey)
+    {
+        _connectError = null;
+        if (string.IsNullOrWhiteSpace(apiKey))
+        {
+            _connectError = "Paste your API key first.";
+            return;
+        }
+
+        _connecting = true;
+        var who = await Api.WhoAmIAsync(apiKey.Trim());
+        _connecting = false;
+
+        if (who is null)
+        {
+            _connectError = "That key wasn't recognized.";
+            return;
+        }
+
+        await Session.SetSessionAsync(apiKey.Trim(), who.UserId, who.DisplayName);
+        Nav.NavigateTo("/");
+    }
+}

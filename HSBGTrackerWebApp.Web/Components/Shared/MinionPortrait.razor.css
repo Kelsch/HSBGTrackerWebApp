@@ -1,0 +1,77 @@
+﻿.minion-portrait {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    width: 124px;
+    cursor: pointer;
+    transition: transform 0.15s ease;
+}
+
+    .minion-portrait:hover {
+        transform: translateY(-3px);
+    }
+
+    .minion-portrait.selected {
+        transform: translateY(-4px);
+    }
+
+        .minion-portrait.selected .frame-shape {
+            stroke-width: 7;
+        }
+
+.frame-wrapper {
+    width: 114px;
+    height: 132px;
+}
+
+.frame-svg {
+    width: 100%;
+    height: 100%;
+    overflow: visible;
+}
+
+/* ===== Base grey border ===== */
+.frame-shape {
+    fill: none;
+    stroke: #6b7280;
+    stroke-width: 5;
+    stroke-linejoin: round;
+}
+
+.minion-portrait.golden .frame-shape {
+    stroke: #e6b422;
+    stroke-width: 5.5px;
+}
+
+.minion-portrait.taunt .frame-shape {
+    stroke-width: 6px;
+}
+
+.minion-portrait.taunt:not(.golden) .frame-shape {
+    stroke: #4b5563;
+}
+
+/* ===== Divine Shield bubble ===== */
+.divine-bubble {
+    fill: rgba(125, 211, 252, 0.15);
+    stroke: rgba(56, 189, 248, 0.65);
+    stroke-width: 2.5px;
+    filter: url(#glow-divine);
+}
+
+/* ===== Stats ===== */
+.minion-portrait .stats {
+    margin-top: 4px;
+    display: flex;
+    align-items: baseline;
+    gap: 2px;
+    font-weight: 800;
+    font-size: 1.1rem;
+    color: #e8f5e9;
+    text-shadow: 0 1px 3px rgba(0, 0, 0, 0.9);
+}
+
+.minion-portrait .sep {
+    opacity: 0.5;
+    font-weight: 600;
+}

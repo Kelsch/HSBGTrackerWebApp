@@ -1,0 +1,87 @@
+﻿@if (Minion is not null)
+{
+    <div class="minion-detail-panel">
+        <div class="detail-header">
+            <div class="detail-portrait-wrap">
+                <MinionPortrait PortraitUrl="@Resolved?.PortraitUrl"
+                                Name="@DisplayName"
+                                Attack="@Minion.Attack"
+                                Health="@Minion.Health"
+                                IsGolden="@Minion.IsGolden"
+                                HasTaunt="@Minion.Taunt"
+                                HasDivineShield="@Minion.DivineShield" />
+            </div>
+            <div class="detail-title">
+                <h3>@DisplayName</h3>
+                <div class="detail-stats">
+                    <span>@Minion.Attack / @Minion.Health</span>
+                    @if (Minion.IsGolden)
+                    {
+                        <span class="badge golden">Golden</span>
+                    }
+                </div>
+            </div>
+        </div>
+
+        @if (string.IsNullOrWhiteSpace(Resolved?.Text) == false)
+        {
+            <p class="detail-text">@Resolved.Text</p>
+        }
+
+        <div class="detail-keywords">
+            @if (Minion.Taunt)
+            {
+                <span class="kw">Taunt</span>
+            }
+            @if (Minion.DivineShield)
+            {
+                <span class="kw">Divine Shield</span>
+            }
+            @if (Minion.Poisonous)
+            {
+                <span class="kw">Poisonous</span>
+            }
+            @if (Minion.Reborn)
+            {
+                <span class="kw">Reborn</span>
+            }
+            @if (Minion.Windfury)
+            {
+                <span class="kw">Windfury</span>
+            }
+            @if (Minion.Lifesteal)
+            {
+                <span class="kw">Lifesteal</span>
+            }
+            @if (Minion.HasDeathrattle)
+            {
+                <span class="kw">Deathrattle</span>
+            }
+            @if (Minion.HasBattlecry)
+            {
+                <span class="kw">Battlecry</span>
+            }
+        </div>
+
+        @if (Minion.Attachments.Count > 0)
+        {
+            <div class="detail-attachments">
+                <div class="section-label">Attachments</div>
+                @foreach (var att in Minion.Attachments)
+                {
+                    <div class="attachment-row">@att.Name ?? att.CardId</div>
+                }
+            </div>
+        }
+    </div>
+}
+
+@code {
+    [Parameter] public MinionSnapshot? Minion { get; set; }
+    [Parameter] public ResolvedCard? Resolved { get; set; }
+
+    private string DisplayName =>
+        Resolved is { Found: true } && !string.IsNullOrWhiteSpace(Resolved.Name)
+            ? Resolved.Name
+            : Minion?.Name ?? Minion?.CardId ?? "Unknown";
+}

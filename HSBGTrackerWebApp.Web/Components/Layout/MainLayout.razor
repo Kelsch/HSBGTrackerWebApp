@@ -1,0 +1,47 @@
+@inherits LayoutComponentBase
+@inject AuthSessionState Session
+@implements IDisposable
+
+<div class="app-shell">
+    <header class="ledger-header">
+        <a href="/" class="ledger-title">The Tavern Ledger</a>
+        <nav class="ledger-nav">
+            <a href="/">Feed</a>
+            @if (Session.IsConnected)
+            {
+                <a href="/?mine=true">My games</a>
+                <span class="session-pill">@Session.DisplayName</span>
+            }
+            else
+            {
+                <a href="/connect" class="session-connect">Connect</a>
+            }
+        </nav>
+    </header>
+
+    <main class="ledger-main">
+        @Body
+    </main>
+</div>
+
+@code {
+    protected override void OnInitialized()
+    {
+        Session.Changed += StateHasChanged;
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            await Session.EnsureRestoredAsync();
+        }
+    }
+
+    private async Task DisconnectAsync() => await Session.ClearAsync();
+
+    public void Dispose()
+    {
+        Session.Changed -= StateHasChanged;
+    }
+}

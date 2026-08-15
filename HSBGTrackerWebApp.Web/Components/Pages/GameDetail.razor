@@ -1,0 +1,91 @@
+@page "/games/{GameId:guid}"
+@inject GamesApiClient Api
+@inject AuthSessionState Session
+
+@if (_loading)
+{
+    <p class="loading-note">Unrolling the scroll…</p>
+}
+else if (_game is null)
+{
+    <div class="empty-state">
+        <p class="empty-state-title">Can't find that game.</p>
+        <p>It may be private to someone else, or the link's wrong. <a href="/">Back to the ledger</a>.</p>
+    </div>
+}
+else
+{
+    <div class="detail-header">
+        <a href="/" class="back-link">← Back to the ledger</a>
+        <span class="placement-badge @(_game.Placement == 1 ? "placement-win" : "placement-loss")">
+            @PlacementLabel(_game.Placement) place
+        </span>
+        <span class="detail-date">@_game.PlayedAtUtc.ToLocalTime().ToString("MMMM d, yyyy")</span>
+    </div>
+
+    <div class="matchup">
+        <BoardCard PlayerName="@_game.OwnerDisplayName" Board="_game.MyBoard" Score="_game.MyBoardScore" />
+
+        <div class="vs-divider">vs</div>
+
+        <div>
+            <BoardCard PlayerName="@OpponentDisplayName"
+                       Board="_game.OpponentBoard"
+                       Score="_game.OpponentBoardScore"
+                       IsOpponent="true" />
+            @if (_game.OpponentOwnerUserId is not null)
+            {
+                <p class="linked-note">Also tracked in the ledger.</p>
+            }
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter] public Guid GameId { get; set; }
+
+    private GameDto? _game;
+    private bool _loading = true;
+
+    private string OpponentDisplayName =>
+        _game?.OpponentOwnerDisplayName ?? _game?.OpponentPlayerName ?? "Opponent";
+
+    protected override async Task OnInitializedAsync()
+    {
+        Session.Changed += OnSessionChanged;
+        if (Session.HasCheckedStorage)
+        {
+            await LoadAsync();
+        }
+    }
+
+    private async void OnSessionChanged()
+    {
+        await LoadAsync();
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private async Task LoadAsync()
+    {
+        if (Session.IsConnected == false)
+        {
+            _loading = false;
+            _game = null;
+            return;
+        }
+
+        _loading = true;
+        await InvokeAsync(StateHasChanged);
+
+        _game = await Api.GetGameAsync(GameId);
+        _loading = false;
+    }
+
+    private static string PlacementLabel(int placement) => placement switch
+    {
+        1 => "1st",
+        2 => "2nd",
+        3 => "3rd",
+        _ => $"{placement}th",
+    };
+}

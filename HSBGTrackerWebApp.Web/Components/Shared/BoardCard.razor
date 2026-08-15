@@ -1,0 +1,363 @@
+@inject ICardResolver Cards
+
+<div class="board-card">
+    <!-- Header -->
+    <div class="board-card-header">
+        <div class="board-identity">
+            @if (_hero?.ImageUrl is not null)
+            {
+                <img class="hero-portrait" src="@_hero.ImageUrl" alt="@DisplayName(_hero, Board.HeroCardId)" loading="lazy" />
+            }
+            <div class="board-identity-text">
+                <span class="board-card-name">@PlayerName</span>
+                @if (!string.IsNullOrWhiteSpace(Board.HeroCardId))
+                {
+                    <span class="hero-name">@DisplayName(_hero, Board.HeroCardId)</span>
+                }
+            </div>
+        </div>
+
+        @if (Score.HasValue)
+        {
+            <span class="score-medallion" title="Board score">@Score.Value.ToString("0")</span>
+        }
+    </div>
+
+    <!-- Meta row -->
+    <div class="board-card-meta">
+        <span class="tavern-pips" title="Tavern tier @Board.TavernTier">
+            @for (var i = 1; i <= 6; i++)
+            {
+                <span class="pip @(i <= Board.TavernTier ? "pip-filled" : null)"></span>
+            }
+            <span class="meta-label">@Board.TavernTier</span>
+        </span>
+
+        @if (Board.HeroPower is not null && !string.IsNullOrWhiteSpace(Board.HeroPower.CardId))
+        {
+            <span class="hero-power-chip" title="@(_heroPower?.Text ?? Board.HeroPower.CardId)">
+                @if (_heroPower?.ImageUrl is not null)
+                {
+                    <img src="@_heroPower.ImageUrl" alt="" class="hero-power-thumb" loading="lazy" />
+                }
+                <span>@DisplayName(_heroPower, Board.HeroPower.CardId, Board.HeroPower.Name)</span>
+            </span>
+        }
+    </div>
+
+    <!-- Trinkets -->
+    @if (Board.Trinkets.Count > 0 || ShowEmptyTrinkets)
+    {
+        <div class="trinket-section">
+            <div class="section-label">Trinkets</div>
+            @if (Board.Trinkets.Count == 0)
+            {
+                <span class="empty-board-note">None</span>
+            }
+            else
+            {
+                <div class="trinket-row">
+                    @foreach (var trinket in Board.Trinkets)
+                    {
+                        var resolved = ResolveCached(trinket.CardId);
+                        <div class="trinket-card trinket-@trinket.Tier.ToString().ToLowerInvariant()"
+                             title="@TooltipFor(resolved, trinket.CardId, trinket.ScriptDataNum1, trinket.ScriptDataNum2, trinket.ScriptDataNum3, trinket.ScriptDataNum4)">
+                            @if (resolved.ImageUrl is not null)
+                            {
+                                <img src="@resolved.ImageUrl" alt="@DisplayName(resolved, trinket.CardId, trinket.Name)" class="trinket-art" loading="lazy" />
+                            }
+                            <div class="trinket-body">
+                                <span class="trinket-name">@DisplayName(resolved, trinket.CardId, trinket.Name)</span>
+                                <span class="trinket-tier-label">@TierLabel(trinket.Tier)</span>
+                                @if (HasEffectValues(trinket))
+                                {
+                                    <span class="effect-values">@FormatEffectValues(trinket)</span>
+                                }
+                            </div>
+                        </div>
+                    }
+                </div>
+            }
+        </div>
+    }
+
+    <!-- Board (Minions) -->
+    <div class="minion-section">
+        <div class="section-label">Board</div>
+        <div class="minion-row">
+            @if (Board.Minions.Count == 0)
+            {
+                <span class="empty-board-note">
+                    @(IsOpponent ? "Opponent board unavailable" : "No minions recorded")
+                </span>
+            }
+            else
+            {
+                @foreach (var minion in Board.Minions.OrderBy(m => m.BoardPosition))
+                {
+                    var resolved = ResolveCached(minion.CardId, minion.IsGolden);
+
+                    <MinionPortrait PortraitUrl="@resolved.PortraitUrl"
+                                    Name="@DisplayName(resolved, minion.CardId)"
+                                    Attack="@minion.Attack"
+                                    Health="@minion.Health"
+                                    IsGolden="@minion.IsGolden"
+                                    HasTaunt="@minion.Taunt"
+                                    HasDivineShield="@minion.DivineShield"
+                                    IsSelected="@(_selectedMinion == minion)"
+                                    OnClick="@(() => SelectMinion(minion))" />
+                }
+            }
+        </div>
+    </div>
+    @if (_selectedMinion is not null)
+    {
+        <MinionDetailPanel Minion="_selectedMinion" Resolved="_selectedResolved" />
+    }
+</div>
+
+@code {
+    [Parameter, EditorRequired] public string PlayerName { get; set; } = "";
+    [Parameter, EditorRequired] public BoardSnapshot Board { get; set; } = new();
+    [Parameter] public double? Score { get; set; }
+    [Parameter] public bool IsOpponent { get; set; }
+    [Parameter] public bool ShowEmptyTrinkets { get; set; }
+    [Parameter] public bool ShowTags { get; set; } = true;
+
+    private readonly Dictionary<string, ResolvedCard> _cache = new(StringComparer.OrdinalIgnoreCase);
+    private ResolvedCard? _hero;
+    private ResolvedCard? _heroPower;
+    private string _lastBoardKey = "";
+
+    private MinionSnapshot? _selectedMinion;
+    private ResolvedCard? _selectedResolved;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        var key = BoardKey(Board);
+        if (key == _lastBoardKey && _cache.Count > 0)
+        {
+            return;
+        }
+
+        _lastBoardKey = key;
+        _cache.Clear();
+
+        await Cards.EnsureReadyAsync();
+
+        _hero = string.IsNullOrWhiteSpace(Board.HeroCardId)
+            ? null
+            : await Cards.ResolveAsync(Board.HeroCardId);
+
+        if (_hero is not null)
+        {
+            _cache[CacheKey(_hero.CardId, false)] = _hero;
+        }
+
+        _heroPower = Board.HeroPower is null || string.IsNullOrWhiteSpace(Board.HeroPower.CardId)
+            ? null
+            : await Cards.ResolveAsync(Board.HeroPower.CardId);
+
+        if (_heroPower is not null)
+        {
+            _cache[CacheKey(_heroPower.CardId, false)] = _heroPower;
+        }
+
+        foreach (var minion in Board.Minions)
+        {
+            await CacheAsync(minion.CardId, minion.IsGolden);
+            foreach (var a in minion.Attachments)
+            {
+                await CacheAsync(a.CardId, false);
+            }
+        }
+
+        foreach (var trinket in Board.Trinkets)
+        {
+            await CacheAsync(trinket.CardId, false);
+            foreach (var a in trinket.Attachments)
+            {
+                await CacheAsync(a.CardId, false);
+            }
+        }
+    }
+
+    private void SelectMinion(MinionSnapshot minion)
+    {
+        if (_selectedMinion == minion)
+        {
+            _selectedMinion = null;
+            _selectedResolved = null;
+        }
+        else
+        {
+            _selectedMinion = minion;
+            _selectedResolved = ResolveCached(minion.CardId, minion.IsGolden);
+        }
+    }
+
+    // ---------- helpers ----------
+    private async Task CacheAsync(string? cardId, bool isGolden)
+    {
+        if (string.IsNullOrWhiteSpace(cardId))
+        {
+            return;
+        }
+        var key = CacheKey(cardId, isGolden);
+        if (_cache.ContainsKey(key))
+        {
+            return;
+        }
+        _cache[key] = await Cards.ResolveAsync(cardId, isGolden);
+    }
+
+    private ResolvedCard ResolveCached(string? cardId, bool isGolden = false)
+    {
+        if (string.IsNullOrWhiteSpace(cardId))
+        {
+            return new ResolvedCard { Name = "Unknown", CardId = "" };
+        }
+
+        var key = CacheKey(cardId, isGolden);
+        if (_cache.TryGetValue(key, out var resolved))
+        {
+            return resolved;
+        }
+
+        resolved = Cards.Resolve(cardId, isGolden);
+        _cache[key] = resolved;
+        return resolved;
+    }
+
+    private static string CacheKey(string cardId, bool isGolden) => $"{cardId}|{isGolden}";
+
+    private static string BoardKey(BoardSnapshot b) =>
+        $"{b.PlayerId}|{b.HeroCardId}|{b.TavernTier}|{b.Minions.Count}|{b.Trinkets.Count}|{b.Minions.Sum(m => m.EntityId)}|{b.Minions.Sum(m => m.Attachments.Count)}";
+
+    private static string DisplayName(ResolvedCard? resolved, string? cardId, string? fallback = null)
+    {
+        if (resolved is { Found: true } && !string.IsNullOrWhiteSpace(resolved.Name))
+        {
+            return resolved.Name;
+        }
+        if (string.IsNullOrWhiteSpace(fallback) == false)
+        {
+            return fallback!;
+        }
+        if (resolved is not null && string.IsNullOrWhiteSpace(resolved.Name) == false)
+        {
+            return resolved.Name;
+        }
+        return string.IsNullOrWhiteSpace(cardId) ? "Unknown" : cardId!;
+    }
+
+    private static string FormatStat(int value) => value >= 1000 ? $"{value / 1000.0:0.#}k" : value.ToString();
+
+    private static string ShortId(string? cardId) =>
+        string.IsNullOrWhiteSpace(cardId) ? "?" : (cardId.Length <= 10 ? cardId : cardId[^10..]);
+
+    private static bool HasEffectValues(MinionSnapshot m) =>
+        m.ScriptDataNum1 != 0 || m.ScriptDataNum2 != 0 || m.ScriptDataNum3 != 0 || m.ScriptDataNum4 != 0;
+
+    private static bool HasEffectValues(TrinketSnapshot t) =>
+        t.ScriptDataNum1 != 0 || t.ScriptDataNum2 != 0 || t.ScriptDataNum3 != 0 || t.ScriptDataNum4 != 0;
+
+    private static bool HasEffectValues(AttachedEntitySnapshot a) =>
+        a.ScriptDataNum1 != 0 || a.ScriptDataNum2 != 0 || a.ScriptDataNum3 != 0 || a.ScriptDataNum4 != 0;
+
+    private static string FormatEffectValues(MinionSnapshot m) => FormatEffectValues(m.ScriptDataNum1, m.ScriptDataNum2, m.ScriptDataNum3, m.ScriptDataNum4);
+    private static string FormatEffectValues(TrinketSnapshot t) => FormatEffectValues(t.ScriptDataNum1, t.ScriptDataNum2, t.ScriptDataNum3, t.ScriptDataNum4);
+    private static string FormatEffectValues(AttachedEntitySnapshot a) => FormatEffectValues(a.ScriptDataNum1, a.ScriptDataNum2, a.ScriptDataNum3, a.ScriptDataNum4);
+
+    private static string FormatEffectValues(int n1, int n2, int n3, int n4)
+    {
+        if (n3 != 0 || n4 != 0)
+        {
+            return $"{n1} / {n2} / {n3} / {n4}";
+        }
+        if (n2 != 0)
+        {
+            return $"{n1} / {n2}";
+        }
+        return n1.ToString();
+    }
+
+    private static string TierLabel(TrinketTier tier) => tier switch
+    {
+        TrinketTier.Lesser => "Lesser",
+        TrinketTier.Greater => "Greater",
+        _ => "Unknown"
+    };
+
+    private static IEnumerable<(string Short, string Label)> KeywordBadges(MinionSnapshot m)
+    {
+        if (m.Taunt) yield return ("T", "Taunt");
+        if (m.DivineShield) yield return ("DS", "Divine Shield");
+        if (m.Poisonous) yield return ("P", "Poisonous");
+        if (m.Reborn) yield return ("R", "Reborn");
+        if (m.Windfury) yield return ("W", "Windfury");
+        if (m.Lifesteal) yield return ("L", "Lifesteal");
+        if (m.HasDeathrattle) yield return ("DR", "Deathrattle");
+        if (m.HasBattlecry) yield return ("BC", "Battlecry");
+    }
+
+    private static string AttachmentKind(ResolvedCard resolved, string cardId)
+    {
+        if (resolved.IsDarkGift || cardId.Contains("MidGameEffect", StringComparison.OrdinalIgnoreCase))
+        {
+            return "darkgift";
+        }
+        if (resolved.IsTrinketBuff || cardId.Contains("MagicItem", StringComparison.OrdinalIgnoreCase))
+        {
+            return "trinketbuff";
+        }
+        return "enchant";
+    }
+
+    private static string KindLabel(string kind) => kind switch
+    {
+        "darkgift" => "Gift",
+        "trinketbuff" => "Trinket",
+        _ => "Buff"
+    };
+
+    private static string AttachmentTooltip(ResolvedCard resolved, AttachedEntitySnapshot a)
+    {
+        var parts = new List<string>
+        {
+            DisplayName(resolved, a.CardId, a.Name),
+            a.CardId
+        };
+        if (string.IsNullOrWhiteSpace(a.CardType) == false)
+        {
+            parts.Add(a.CardType);
+        }
+        if (string.IsNullOrWhiteSpace(resolved.Text) == false)
+        {
+            parts.Add(resolved.Text.Replace('\n', ' '));
+        }
+        if (HasEffectValues(a))
+        {
+            parts.Add("Effect " + FormatEffectValues(a));
+        }
+        return string.Join(" · ", parts);
+    }
+
+    private string TooltipFor(ResolvedCard resolved, string cardId, int n1, int n2, int n3, int n4)
+    {
+        var parts = new List<string> { DisplayName(resolved, cardId), cardId };
+        if (string.IsNullOrWhiteSpace(resolved.Text) == false)
+        {
+            parts.Add(resolved.Text.Replace('\n', ' '));
+        }
+        if (n1 != 0 || n2 != 0 || n3 != 0 || n4 != 0)
+        {
+            parts.Add("Effect " + FormatEffectValues(n1, n2, n3, n4));
+        }
+        return string.Join(" · ", parts);
+    }
+
+    private static IEnumerable<KeyValuePair<string, int>> NamedTags(Dictionary<string, int> tags) =>
+        tags.Where(kv => kv.Key.Any(char.IsLetter))
+            .OrderBy(kv => kv.Key, StringComparer.OrdinalIgnoreCase);
+}

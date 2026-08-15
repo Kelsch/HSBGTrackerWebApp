@@ -1,0 +1,139 @@
+@page "/"
+@inject GamesApiClient Api
+@inject AuthSessionState Session
+@inject NavigationManager Nav
+@implements IDisposable
+
+<div class="feed-header">
+    <div>
+        <h1>The Ledger</h1>
+        <p class="feed-subtitle">Every board, win or die.</p>
+    </div>
+
+    @if (Session.IsConnected)
+    {
+        <div class="filter-toggle" role="group" aria-label="Filter games">
+            <button class="@(ShowMineOnly ? "" : "filter-active")" @onclick="() => SetFilter(false)">Everyone</button>
+            <button class="@(ShowMineOnly ? "filter-active" : "")" @onclick="() => SetFilter(true)">Just mine</button>
+        </div>
+    }
+</div>
+
+@if (Session.HasCheckedStorage == false || _loading)
+{
+    <p class="loading-note">Turning the pages…</p>
+}
+else if (Session.IsConnected == false)
+{
+    <div class="empty-state">
+        <p class="empty-state-title">Not connected yet.</p>
+        <p><a href="/connect">Connect with your API key</a> to see the shared feed.</p>
+    </div>
+}
+else if (_games.Count == 0)
+{
+    <div class="empty-state">
+        <p class="empty-state-title">No games logged yet.</p>
+        <p>Once someone's tracker uploads a finished game, it'll show up here.</p>
+    </div>
+}
+else
+{
+    <div class="ledger-rows">
+        @foreach (var game in _games)
+        {
+            <a class="ledger-row" href="@($"/games/{game.Id}")">
+                <span class="placement-badge @(game.Placement == 1 ? "placement-win" : "placement-loss")">
+                    @PlacementLabel(game.Placement)
+                </span>
+                <span class="ledger-row-owner">@game.OwnerDisplayName</span>
+                <span class="ledger-row-vs">vs</span>
+                <span class="ledger-row-opponent">
+                    @game.OpponentPlayerName
+                    @if (game.OpponentOwnerUserId is not null)
+                    {
+                        <span class="linked-badge" title="Also a tracked friend">linked</span>
+                    }
+                </span>
+                <span class="ledger-row-meta">
+                    <span class="meta-chip" title="Tavern tier">T@(game.MyBoard?.TavernTier ?? 0)</span>
+                    <span class="meta-chip" title="Minions">@(game.MyBoard?.Minions?.Count ?? 0) min</span>
+                    @if (HasAttachments(game.MyBoard))
+                    {
+                        <span class="meta-chip meta-chip-accent" title="Board has attachments">buffs</span>
+                    }
+                </span>
+                <span class="ledger-row-scores">
+                    @FormatScore(game.MyBoardScore) <span class="score-vs">–</span> @FormatScore(game.OpponentBoardScore)
+                </span>
+                <span class="ledger-row-date">@game.PlayedAtUtc.ToLocalTime().ToString("MMM d")</span>
+            </a>
+        }
+    </div>
+}
+
+@code {
+    [SupplyParameterFromQuery(Name = "mine")]
+    public bool? MineQuery { get; set; }
+
+    private List<GameDto> _games = new();
+    private bool _loading = true;
+    private bool ShowMineOnly => MineQuery == true;
+
+    protected override async Task OnInitializedAsync()
+    {
+        Session.Changed += OnSessionChanged;
+        if (Session.HasCheckedStorage)
+        {
+            await LoadAsync();
+        }
+    }
+
+    private async void OnSessionChanged()
+    {
+        await LoadAsync();
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private async Task SetFilter(bool mine)
+    {
+        Nav.NavigateTo(mine ? "/?mine=true" : "/", forceLoad: false);
+        MineQuery = mine;
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        if (Session.IsConnected == false) 
+        {
+            _loading = false;
+            _games = new();
+            return;
+        }
+
+        _loading = true;
+        await InvokeAsync(StateHasChanged);
+
+        _games = await Api.ListGamesAsync(ShowMineOnly ? Session.UserId : null);
+        _loading = false;
+    }
+
+    private static string PlacementLabel(int placement) => placement switch
+    {
+        1 => "1st",
+        2 => "2nd",
+        3 => "3rd",
+        _ => $"{placement}th",
+    };
+
+    private static string FormatScore(double? score) => score.HasValue ? score.Value.ToString("0") : "—";
+
+    private static bool HasAttachments(BoardSnapshot? board) =>
+        board?.Minions?.Any(m => m.Attachments is { Count: > 0 }) == true
+        || board?.Trinkets?.Any(t => t.Attachments is { Count: > 0 }) == true;
+
+    public void Dispose()
+    {
+        Session.Changed -= OnSessionChanged;
+    }
+}

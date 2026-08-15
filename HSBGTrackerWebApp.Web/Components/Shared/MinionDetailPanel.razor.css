@@ -1,0 +1,166 @@
+﻿/* ===== Minion Detail Panel ===== */
+.minion-detail-panel {
+    margin-top: 1.25rem;
+    padding: 1.25rem 1.4rem;
+    background: #f7f1e3;
+    border: 1px solid #d4c4a8;
+    border-radius: 14px;
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.08), inset 0 1px 0 rgba(255, 255, 255, 0.6);
+    animation: detail-fade-in 0.18s ease-out;
+}
+
+@keyframes detail-fade-in {
+    from {
+        opacity: 0;
+        transform: translateY(6px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+/* Header: portrait + title */
+.minion-detail-panel .detail-header {
+    display: flex;
+    gap: 1.1rem;
+    align-items: center;
+    margin-bottom: 1rem;
+}
+
+.minion-detail-panel .detail-portrait-wrap {
+    flex-shrink: 0;
+    width: 92px;
+}
+
+    .minion-detail-panel .detail-portrait-wrap .minion-portrait {
+        width: 92px;
+    }
+
+    .minion-detail-panel .detail-portrait-wrap .frame-wrapper {
+        width: 86px;
+        height: 100px;
+    }
+
+.minion-detail-panel .detail-title {
+    flex: 1;
+    min-width: 0;
+}
+
+    .minion-detail-panel .detail-title h3 {
+        margin: 0 0 0.35rem 0;
+        font-size: 1.25rem;
+        font-weight: 700;
+        color: #2c2416;
+        line-height: 1.25;
+    }
+
+.minion-detail-panel .detail-stats {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    font-size: 1.05rem;
+    font-weight: 700;
+    color: #3e3424;
+}
+
+    .minion-detail-panel .detail-stats .badge {
+        display: inline-block;
+        padding: 0.15rem 0.5rem;
+        border-radius: 999px;
+        font-size: 0.72rem;
+        font-weight: 700;
+        letter-spacing: 0.03em;
+        text-transform: uppercase;
+    }
+
+        .minion-detail-panel .detail-stats .badge.golden {
+            background: linear-gradient(135deg, #f0c14b, #e6b422);
+            color: #3e2e00;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.15);
+        }
+
+/* Card text */
+.minion-detail-panel .detail-text {
+    margin: 0 0 1rem 0;
+    padding: 0.75rem 0.9rem;
+    background: rgba(255, 255, 255, 0.55);
+    border-radius: 10px;
+    border: 1px solid #e6d9c0;
+    font-size: 0.92rem;
+    line-height: 1.45;
+    color: #3a3224;
+    white-space: pre-line;
+}
+
+/* Keywords */
+.minion-detail-panel .detail-keywords {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+    margin-bottom: 0.75rem;
+}
+
+    .minion-detail-panel .detail-keywords .kw {
+        display: inline-flex;
+        align-items: center;
+        padding: 0.22rem 0.55rem;
+        border-radius: 6px;
+        font-size: 0.75rem;
+        font-weight: 700;
+        color: #fff;
+        background: #5d4e37;
+        letter-spacing: 0.02em;
+    }
+
+/* Attachments */
+.minion-detail-panel .detail-attachments {
+    margin-top: 0.5rem;
+    padding-top: 0.75rem;
+    border-top: 1px solid #e0d2b8;
+}
+
+    .minion-detail-panel .detail-attachments .section-label {
+        font-size: 0.72rem;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+        color: #7a6a52;
+        margin-bottom: 0.4rem;
+    }
+
+.minion-detail-panel .attachment-row {
+    font-size: 0.88rem;
+    color: #4a3f2e;
+    padding: 0.2rem 0;
+}
+
+/* Mobile adjustments */
+@media (max-width: 700px) {
+    .minion-detail-panel {
+        padding: 1rem 1.1rem;
+        margin-top: 1rem;
+    }
+
+        .minion-detail-panel .detail-header {
+            gap: 0.85rem;
+        }
+
+        .minion-detail-panel .detail-portrait-wrap {
+            width: 78px;
+        }
+
+            .minion-detail-panel .detail-portrait-wrap .minion-portrait {
+                width: 78px;
+            }
+
+            .minion-detail-panel .detail-portrait-wrap .frame-wrapper {
+                width: 74px;
+                height: 86px;
+            }
+
+        .minion-detail-panel .detail-title h3 {
+            font-size: 1.1rem;
+        }
+}
