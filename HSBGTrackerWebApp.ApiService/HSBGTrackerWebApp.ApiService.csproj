@@ -7,11 +7,15 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\..\HSBGTracker\HSBGTracker.Core\HSBGTracker.Core.csproj" />
     <ProjectReference Include="..\HSBGTrackerWebApp.ServiceDefaults\HSBGTrackerWebApp.ServiceDefaults.csproj" />
   </ItemGroup>
 
   <ItemGroup>
+    <PackageReference Include="Dapper" Version="2.1.79" />
     <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="10.0.11" />
+    <PackageReference Include="Microsoft.Data.SqlClient" Version="7.0.2" />
+    <PackageReference Include="Npgsql" Version="10.0.3" />
   </ItemGroup>
 
 </Project>

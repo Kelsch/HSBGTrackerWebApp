@@ -1,6 +1,6 @@
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
-using HSBGTrackerWebApp.Core.Contracts;
+using HSBGTracker.Core.Contracts;
 
 namespace HSBGTrackerWebApp.Web.Services;
 

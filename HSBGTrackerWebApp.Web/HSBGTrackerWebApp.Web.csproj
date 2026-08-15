@@ -11,6 +11,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\..\HSBGTracker\HSBGTracker.Core\HSBGTracker.Core.csproj" />
     <ProjectReference Include="..\HSBGTrackerWebApp.ServiceDefaults\HSBGTrackerWebApp.ServiceDefaults.csproj" />
   </ItemGroup>
 
