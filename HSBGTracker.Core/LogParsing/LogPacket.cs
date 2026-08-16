@@ -53,6 +53,20 @@ public sealed class PlayerMappingPacket : LogPacket
     }
 }
 
+/// <summary>From GameState.DebugPrintGame() - PlayerID=N, PlayerName=Name#1234.
+/// Opponent BattleTags often appear here even when Power TAG_CHANGEs only name the local player.</summary>
+public sealed class PlayerNamePacket : LogPacket
+{
+    public int PlayerId { get; }
+    public string Name { get; }
+
+    public PlayerNamePacket(int playerId, string name)
+    {
+        PlayerId = playerId;
+        Name = name;
+    }
+}
+
 public sealed class TagChangePacket : LogPacket
 {
     public EntityRef Entity { get; }

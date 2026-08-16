@@ -25,6 +25,8 @@ public enum GameTag
     ATTACHED,
     PARENT_CARD,
     LINKED_ENTITY,
+    PLAYER_ID,
+    HERO_ENTITY,
 
     // Combat stats
     ATK,
@@ -39,6 +41,10 @@ public enum GameTag
     PLAYER_LEADERBOARD_PLACE,
     PREMIUM,
     BACON_IS_KELTHUZAD_DUPLICATE,
+    /// <summary>PlayerID of the next combat opponent. Set on the player/hero each round.</summary>
+    NEXT_OPPONENT_PLAYER_ID,
+    /// <summary>PlayerID of the most recent combat opponent. Backup if NEXT is cleared.</summary>
+    LAST_OPPONENT_PLAYER_ID,
     /// <summary>Often marks BG spellcraft / useable tavern spells; confirm in your logs.</summary>
     BACON_IS_BOB_QUEST,
     /// <summary>Dark Gift / anomaly style markers appear under various BACON_* names - ExtraTags catches unknowns.</summary>

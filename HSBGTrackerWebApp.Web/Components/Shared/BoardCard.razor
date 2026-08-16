@@ -1,26 +1,66 @@
 @inject ICardResolver Cards
 
 <div class="board-card">
-    <!-- Header -->
+    <!-- Header: player name + score -->
     <div class="board-card-header">
-        <div class="board-identity">
-            @if (_hero?.ImageUrl is not null)
-            {
-                <img class="hero-portrait" src="@_hero.ImageUrl" alt="@DisplayName(_hero, Board.HeroCardId)" loading="lazy" />
-            }
-            <div class="board-identity-text">
-                <span class="board-card-name">@PlayerName</span>
-                @if (!string.IsNullOrWhiteSpace(Board.HeroCardId))
-                {
-                    <span class="hero-name">@DisplayName(_hero, Board.HeroCardId)</span>
-                }
-            </div>
-        </div>
-
+        <span class="board-card-name">@PlayerName</span>
         @if (Score.HasValue)
         {
             <span class="score-medallion" title="Board score">@Score.Value.ToString("0")</span>
         }
+    </div>
+
+    <!-- Showcase: trinkets (left) — big hero portrait (center) — hero power(s) (right) -->
+    <div class="hero-showcase">
+        <div class="trinket-rail">
+            @foreach (var trinket in Board.Trinkets)
+            {
+                var resolved = ResolveCached(trinket.CardId);
+                <div class="side-card trinket-side-card trinket-@trinket.Tier.ToString().ToLowerInvariant()"
+                     title="@TooltipFor(resolved, trinket.CardId, trinket.ScriptDataNum1, trinket.ScriptDataNum2, trinket.ScriptDataNum3, trinket.ScriptDataNum4)">
+                    @if (resolved.ImageUrl is not null)
+                    {
+                        <img src="@resolved.ImageUrl" alt="@DisplayName(resolved, trinket.CardId, trinket.Name)" loading="lazy" />
+                    }
+                    else
+                    {
+                        <span class="side-card-fallback">?</span>
+                    }
+                </div>
+            }
+        </div>
+
+        <div class="hero-centerpiece">
+            @if (_hero?.ImageUrl is not null)
+            {
+                <div class="hero-arch-frame">
+                    <img class="hero-portrait" src="@_hero.ImageUrl" alt="@DisplayName(_hero, Board.HeroCardId)" loading="lazy" />
+                </div>
+            }
+            @if (!string.IsNullOrWhiteSpace(Board.HeroCardId))
+            {
+                <span class="hero-name">@DisplayName(_hero, Board.HeroCardId)</span>
+            }
+        </div>
+
+        <div class="hero-power-rail">
+            @if (Board.HeroPower is not null && !string.IsNullOrWhiteSpace(Board.HeroPower.CardId))
+            {
+                <div class="side-card hero-power-side-card" title="@(_heroPower?.Text ?? Board.HeroPower.CardId)">
+                    @if (_heroPower?.ImageUrl is not null)
+                    {
+                        <img src="@_heroPower.ImageUrl" alt="" loading="lazy" />
+                    }
+                    else
+                    {
+                        <span class="side-card-fallback">?</span>
+                    }
+                </div>
+            }
+            @* Additional hero powers (post-swap, from a trinket, etc.) stack here
+               once/if Board exposes more than one — this rail is already built
+               as a vertical stack for exactly that. *@
+        </div>
     </div>
 
     <!-- Meta row -->
@@ -32,54 +72,7 @@
             }
             <span class="meta-label">@Board.TavernTier</span>
         </span>
-
-        @if (Board.HeroPower is not null && !string.IsNullOrWhiteSpace(Board.HeroPower.CardId))
-        {
-            <span class="hero-power-chip" title="@(_heroPower?.Text ?? Board.HeroPower.CardId)">
-                @if (_heroPower?.ImageUrl is not null)
-                {
-                    <img src="@_heroPower.ImageUrl" alt="" class="hero-power-thumb" loading="lazy" />
-                }
-                <span>@DisplayName(_heroPower, Board.HeroPower.CardId, Board.HeroPower.Name)</span>
-            </span>
-        }
     </div>
-
-    <!-- Trinkets -->
-    @if (Board.Trinkets.Count > 0 || ShowEmptyTrinkets)
-    {
-        <div class="trinket-section">
-            <div class="section-label">Trinkets</div>
-            @if (Board.Trinkets.Count == 0)
-            {
-                <span class="empty-board-note">None</span>
-            }
-            else
-            {
-                <div class="trinket-row">
-                    @foreach (var trinket in Board.Trinkets)
-                    {
-                        var resolved = ResolveCached(trinket.CardId);
-                        <div class="trinket-card trinket-@trinket.Tier.ToString().ToLowerInvariant()"
-                             title="@TooltipFor(resolved, trinket.CardId, trinket.ScriptDataNum1, trinket.ScriptDataNum2, trinket.ScriptDataNum3, trinket.ScriptDataNum4)">
-                            @if (resolved.ImageUrl is not null)
-                            {
-                                <img src="@resolved.ImageUrl" alt="@DisplayName(resolved, trinket.CardId, trinket.Name)" class="trinket-art" loading="lazy" />
-                            }
-                            <div class="trinket-body">
-                                <span class="trinket-name">@DisplayName(resolved, trinket.CardId, trinket.Name)</span>
-                                <span class="trinket-tier-label">@TierLabel(trinket.Tier)</span>
-                                @if (HasEffectValues(trinket))
-                                {
-                                    <span class="effect-values">@FormatEffectValues(trinket)</span>
-                                }
-                            </div>
-                        </div>
-                    }
-                </div>
-            }
-        </div>
-    }
 
     <!-- Board (Minions) -->
     <div class="minion-section">
