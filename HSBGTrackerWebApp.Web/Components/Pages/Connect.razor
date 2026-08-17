@@ -32,7 +32,7 @@
             <div class="connect-form connect-form-register">
                 <input type="text" placeholder="Display name" @bind="_displayName" />
                 <input type="text" placeholder="BattleTag (optional - links you as an opponent)" @bind="_battleTag" />
-                <button @onclick="RegisterAsync" disabled="@_registering">Create account</button>
+                <button type="button" @onclick="RegisterAsync" disabled="@_registering">Create account</button>
             </div>
             @if (_registerError is not null)
             {
@@ -66,6 +66,7 @@
     private async Task RegisterAsync()
     {
         _registerError = null;
+
         if (string.IsNullOrWhiteSpace(_displayName))
         {
             _registerError = "Enter a display name first.";
@@ -73,20 +74,31 @@
         }
 
         _registering = true;
-        var result = await Api.RegisterAsync(new RegisterUserRequest
+        try
         {
-            DisplayName = _displayName.Trim(),
-            BattleTag = string.IsNullOrWhiteSpace(_battleTag) ? null : _battleTag.Trim(),
-        });
-        _registering = false;
+            var result = await Api.RegisterAsync(new RegisterUserRequest
+            {
+                DisplayName = _displayName.Trim(),
+                BattleTag = string.IsNullOrWhiteSpace(_battleTag) ? null : _battleTag.Trim(),
+            });
 
-        if (result is null)
-        {
-            _registerError = "Couldn't create the account - try again.";
-            return;
+            if (result is null)
+            {
+                _registerError = "Couldn't create the account – the API returned an error.";
+                return;
+            }
+
+            _issuedApiKey = result.ApiKey;
         }
-
-        _issuedApiKey = result.ApiKey;
+        catch (Exception ex)
+        {
+            _registerError = $"Request failed: {ex.Message}";
+            Console.WriteLine(ex); // shows up in the web container logs
+        }
+        finally
+        {
+            _registering = false;
+        }
     }
 
     private async Task UseIssuedKeyAsync()
