@@ -2,12 +2,10 @@ name: Build and Push Docker images
 
 on:
   push:
-    branches: [ "main" ]
+    branches: [ "master" ]
 
 env:
   REGISTRY: ghcr.io
-  IMAGE_API: ghcr.io/${{ github.repository_owner }}/hsbg-api
-  IMAGE_WEB: ghcr.io/${{ github.repository_owner }}/hsbg-web
 
 jobs:
   build-and-push:
@@ -19,6 +17,12 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Set lowercase image names
+        run: |
+          OWNER_LC=${GITHUB_REPOSITORY_OWNER,,}
+          echo "IMAGE_API=ghcr.io/${OWNER_LC}/hsbg-api" >> $GITHUB_ENV
+          echo "IMAGE_WEB=ghcr.io/${OWNER_LC}/hsbg-web" >> $GITHUB_ENV
 
       - name: Log in to GitHub Container Registry
         uses: docker/login-action@v3
@@ -34,7 +38,7 @@ jobs:
         uses: docker/build-push-action@v5
         with:
           context: .
-          file: HSBGTrackerWebApp.Api/Dockerfile
+          file: HSBGTrackerWebApp.ApiService/Dockerfile
           push: true
           tags: |
             ${{ env.IMAGE_API }}:latest
