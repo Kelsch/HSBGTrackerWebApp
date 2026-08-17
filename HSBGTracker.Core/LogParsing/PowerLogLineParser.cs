@@ -19,6 +19,11 @@ public sealed class PowerLogLineParser
         @"^\S+ [\d:.]+ \S+\.DebugPrintPower\(\) - (?<indent>\s*)(?<rest>.*)$",
         RegexOptions.Compiled);
 
+    // e.g. "D 09:01:05.7959635 GameState.DebugPrintGame() - PlayerID=2, PlayerName=Foo#1234"
+    private static readonly Regex DebugPrintGamePlayerRegex = new(
+        @"^\S+ [\d:.]+\s+\S+\.DebugPrintGame\(\) - PlayerID=(?<playerId>\d+),\s*PlayerName=(?<name>.+)$",
+        RegexOptions.Compiled);
+
     private static readonly Regex TagChangeRegex = new(
         @"^TAG_CHANGE Entity=(?<entity>.+?) tag=(?<tag>\S+) value=(?<value>\S+)",
         RegexOptions.Compiled);
@@ -57,6 +62,16 @@ public sealed class PowerLogLineParser
 
     public IReadOnlyList<LogPacket> ParseLine(string rawLine)
     {
+        if (DebugPrintGamePlayerRegex.Match(rawLine) is { Success: true } gamePlayer)
+        {
+            return new LogPacket[]
+            {
+                new PlayerNamePacket(
+                    int.Parse(gamePlayer.Groups["playerId"].Value),
+                    gamePlayer.Groups["name"].Value.Trim()),
+            };
+        }
+
         var prefixMatch = PrefixRegex.Match(rawLine);
         if (!prefixMatch.Success)
             return Array.Empty<LogPacket>(); // not a DebugPrintPower line - chat, other loggers, etc.

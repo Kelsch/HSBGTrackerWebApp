@@ -7,7 +7,16 @@ public sealed class PlayerState
     public int HeroEntityId { get; set; }
     public string? HeroCardId { get; set; }
 
+    /// <summary>BattleTag or DebugPrintGame PlayerName when the log reveals it.</summary>
+    public string? DisplayName { get; set; }
+
     public int TavernTier { get; set; }
+
+    /// <summary>PlayerID of the opponent for the current/next combat. Null when unset.</summary>
+    public int? CurrentOpponentPlayerId { get; set; }
+
+    /// <summary>PlayerID of the most recent real combat opponent.</summary>
+    public int? LastOpponentPlayerId { get; set; }
 
     /// <summary>1-8. Set once this player is eliminated; null while still alive.</summary>
     public int? LeaderboardPlace { get; set; }

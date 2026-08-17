@@ -16,14 +16,18 @@ builder.Services.AddProblemDetails();
 builder.Services.AddOpenApi();
 
 // The only line that needs to change to move databases - both factories implement the same
-var databaseProvider = builder.Configuration["DatabaseProvider"] ?? "Postgres";
+var databaseProvider = builder.Configuration["DatabaseProvider"] ?? "Sqlite";
 if (string.Equals(databaseProvider, "SqlServer", StringComparison.OrdinalIgnoreCase))
 {
     builder.Services.AddSingleton<ISqlConnectionFactory, SqlServerConnectionFactory>();
 }
-else
+else if(string.Equals(databaseProvider, "Postgres", StringComparison.OrdinalIgnoreCase))
 {
     builder.Services.AddSingleton<ISqlConnectionFactory, PostgresConnectionFactory>();
+}
+else
+{
+    builder.Services.AddSingleton<ISqlConnectionFactory, SqliteConnectionFactory>();
 }
 
 builder.Services.AddScoped<IUserRepository, UserRepository>();

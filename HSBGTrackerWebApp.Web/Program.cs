@@ -31,7 +31,7 @@ builder.Services.AddHostedService<HsbgCardsRefreshService>();
 
 var app = builder.Build();
 
-if (!app.Environment.IsDevelopment())
+if (app.Environment.IsDevelopment() == false)
 {
     app.UseExceptionHandler("/Error", createScopeForErrors: true);
     app.UseHsts();
