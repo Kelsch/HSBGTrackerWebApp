@@ -83,17 +83,14 @@
             });
 
             if (result is null)
-            {
                 _registerError = "Couldn't create the account – the API returned an error.";
-                return;
-            }
-
-            _issuedApiKey = result.ApiKey;
+            else
+                _issuedApiKey = result.ApiKey;
         }
         catch (Exception ex)
         {
             _registerError = $"Request failed: {ex.Message}";
-            Console.WriteLine(ex); // shows up in the web container logs
+            Console.WriteLine(ex);
         }
         finally
         {
