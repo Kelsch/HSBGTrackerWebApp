@@ -38,7 +38,7 @@ jobs:
         uses: docker/build-push-action@v5
         with:
           context: .
-          file: HSBGTrackerWebApp.Api/Dockerfile
+          file: HSBGTrackerWebApp.ApiService/Dockerfile
           push: true
           tags: |
             ${{ env.IMAGE_API }}:latest
