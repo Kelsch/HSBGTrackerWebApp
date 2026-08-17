@@ -42,6 +42,12 @@ builder.Services.AddAuthorization();
 
 var app = builder.Build();
 
+using (var scope = app.Services.CreateScope())
+{
+    var factory = scope.ServiceProvider.GetRequiredService<ISqlConnectionFactory>();
+    await DatabaseInitializer.EnsureCreatedAsync(factory);
+}
+
 // Configure the HTTP request pipeline.
 app.UseExceptionHandler();
 
