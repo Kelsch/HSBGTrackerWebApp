@@ -1,0 +1,31 @@
+services:
+  api:
+    build:
+      context: .
+      dockerfile: HSBGTrackerWebApp.Api/Dockerfile
+    ports:
+      - "8080:8080"
+    volumes:
+      - hsbg-data:/data
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Docker
+      - DatabaseProvider=Sqlite
+      - ConnectionStrings__Default=Data Source=/data/hsbg.db
+    restart: unless-stopped
+
+  web:
+    build:
+      context: .
+      dockerfile: HSBGTrackerWebApp.Web/Dockerfile
+    ports:
+      - "8081:8080"
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Docker
+      # Tell the frontend where the API lives
+      - ApiBaseUrl=http://api:8080
+    depends_on:
+      - api
+    restart: unless-stopped
+
+volumes:
+  hsbg-data:

@@ -40,10 +40,20 @@ public sealed class GameStateApplier
                         ApplyTag(entity, tagName, rawValue);
                     }
 
+                    // Resolve CONTROLLER first
+                    if (entity.HasTag(GameTag.CONTROLLER))
+                    {
+                        var rawController = entity.GetTag(GameTag.CONTROLLER);
+                        var resolved = _state.TranslateControllerEntityId(rawController) ?? rawController;
+                        entity.SetTag(GameTag.CONTROLLER, resolved);
+                    }
+
+                    TryUpdatePreCombatOpponentBoard();
+
                     MaybeCaptureTavernTier(entity);
                     MaybeCaptureHero(entity);
                     MaybeCaptureOpponent(entity);
-                    MaybeRefreshOpponentBoard(entity);
+                    MaybeRefreshBoard(entity);
 
                     if (entity.AttachedToEntityId != 0
                         && _state.Entities.TryGetValue(entity.AttachedToEntityId, out var host)
@@ -77,10 +87,20 @@ public sealed class GameStateApplier
                         ApplyTag(entity, tagName, rawValue);
                     }
 
+                    // Resolve CONTROLLER first
+                    if (entity.HasTag(GameTag.CONTROLLER))
+                    {
+                        var rawController = entity.GetTag(GameTag.CONTROLLER);
+                        var resolved = _state.TranslateControllerEntityId(rawController) ?? rawController;
+                        entity.SetTag(GameTag.CONTROLLER, resolved);
+                    }
+
+                    TryUpdatePreCombatOpponentBoard();
+
                     MaybeCaptureTavernTier(entity);
                     MaybeCaptureHero(entity);
                     MaybeCaptureOpponent(entity);
-                    MaybeRefreshOpponentBoard(entity);
+                    MaybeRefreshBoard(entity);
 
                     if (entity.AttachedToEntityId != 0
                         && _state.Entities.TryGetValue(entity.AttachedToEntityId, out var host)
@@ -115,6 +135,14 @@ public sealed class GameStateApplier
 
                     var entity = _state.GetOrCreateEntity(id.Value);
                     ApplyTag(entity, tagChange.TagName, tagChange.RawValue);
+
+                    // Refresh boards when something important about a minion changes
+                    if (IsBoardRelevantTag(tagChange.TagName))
+                    {
+                        MaybeRefreshBoard(entity);
+                    }
+
+                    TryUpdatePreCombatOpponentBoard();
 
                     // CONTROLLER's raw value is a Player EntityID, not a PlayerID - translate it.
                     if (tagChange.TagName == nameof(GameTag.CONTROLLER)
@@ -175,22 +203,65 @@ public sealed class GameStateApplier
                     }
 
                     MaybeCaptureHero(entity);
-                    MaybeRefreshOpponentBoard(entity);
+                    MaybeRefreshBoard(entity);
 
                     break;
                 }
 
             case BlockStartPacket block:
-                if (block.BlockType.Equals("ATTACK", StringComparison.OrdinalIgnoreCase)
-                    && _state.CurrentOpponentPlayerId is int attackOpponent)
+                //if (block.BlockType.Equals("ATTACK", StringComparison.OrdinalIgnoreCase)
+                //    && _state.CurrentOpponentPlayerId is int attackOpponent
+                //    && _state.FriendlyPlayerId is int friendlyId
+                //    && _state.HasTakenCombatSnapshot(attackOpponent) == false)
+                //{
+                //    var opponentMinions = _state.Entities.Values
+                //        .Where(e => e.CardType == CardType.MINION
+                //                 && e.Zone == Zone.PLAY
+                //                 && e.ControllerPlayerId != friendlyId)
+                //        .OrderBy(e => e.ZonePosition)
+                //        .Select(e => e.Clone())
+                //        .ToList();
+
+                //    if (opponentMinions.Count > 0)
+                //    {
+                //        _state.SetLastKnownBoard(attackOpponent, opponentMinions);
+                //        _state.MarkCombatSnapshotTaken(attackOpponent);
+
+                //        Console.WriteLine($"[combat-debug] First-attack snapshot: {opponentMinions.Count} minions for player {attackOpponent}");
+                //    }
+                //}
+                if (block.BlockType.Equals("ATTACK", StringComparison.OrdinalIgnoreCase))
                 {
-                    // First attacks happen after combat copies are on the board, before they die.
-                    _state.RefreshLastKnownBoard(attackOpponent, onlyIfRicher: true);
+                    _state.MarkCombatStarted();   // lock the snapshot
                 }
                 break;
 
             case BlockEndPacket:
                 break;
+        }
+    }
+
+    private void TryUpdatePreCombatOpponentBoard()
+    {
+        if (_state.CurrentOpponentPlayerId is not int oppId) return;
+        if (_state.FriendlyPlayerId is not int friendlyId) return;
+        if (_state.CombatHasStarted) return;          // already locked
+
+        var opponentMinions = _state.Entities.Values
+            .Where(e => e.CardType == CardType.MINION
+                     && e.Zone == Zone.PLAY
+                     && e.ControllerPlayerId != friendlyId)
+            .OrderBy(e => e.ZonePosition)
+            .Select(e => e.Clone())
+            .ToList();
+
+        if (opponentMinions.Count > 0)
+        {
+            Console.WriteLine(
+    $"[pre-combat] opp={oppId} count={opponentMinions.Count} " +
+    $"cards=[{string.Join(", ", opponentMinions.Select(m => m.CardId))}]");
+
+            _state.SetCombatBoard(oppId, opponentMinions);
         }
     }
 
@@ -272,14 +343,39 @@ public sealed class GameStateApplier
         player.HeroCardId = entity.CardId;
     }
 
-    private void MaybeRefreshOpponentBoard(Entity entity)
+    //private void MaybeRefreshOpponentBoard(Entity entity)
+    //{
+    //    if (entity.CardType != CardType.MINION || entity.Zone != Zone.PLAY)
+    //        return;
+
+    //    var controller = entity.ControllerPlayerId;
+    //    if (controller != 0 && controller == _state.CurrentOpponentPlayerId)
+    //        _state.RefreshLastKnownBoard(controller, onlyIfRicher: true);
+    //}
+
+    private void MaybeRefreshBoard(Entity entity)
     {
-        if (entity.CardType != CardType.MINION || entity.Zone != Zone.PLAY)
+        // Only care about real minions that are (or just were) on a board
+        if (entity.CardType != CardType.MINION)
             return;
 
         var controller = entity.ControllerPlayerId;
-        if (controller != 0 && controller == _state.CurrentOpponentPlayerId)
+        if (controller == 0)
+            return;
+
+        // Always keep the friendly board up to date
+        if (controller == _state.FriendlyPlayerId)
+        {
+            _state.RefreshLastKnownBoard(controller);
+            return;
+        }
+
+        // Keep the current opponent (and the last known opponent) up to date
+        if (controller == _state.CurrentOpponentPlayerId
+            || controller == _state.LastOpponentPlayerId)
+        {
             _state.RefreshLastKnownBoard(controller, onlyIfRicher: true);
+        }
     }
 
     private int ResolveOwnerFromEntity(Entity entity)
@@ -381,6 +477,16 @@ public sealed class GameStateApplier
             $"{tagChange.TagName}={opponentId} -> friendly player {friendlyId}");
         _state.NotifyOpponentPaired(friendlyId, opponentId);
     }
+
+    private static bool IsBoardRelevantTag(string tagName) =>
+    tagName.Equals(nameof(GameTag.ZONE), StringComparison.OrdinalIgnoreCase)
+    || tagName.Equals(nameof(GameTag.ZONE_POSITION), StringComparison.OrdinalIgnoreCase)
+    || tagName.Equals(nameof(GameTag.ATK), StringComparison.OrdinalIgnoreCase)
+    || tagName.Equals(nameof(GameTag.HEALTH), StringComparison.OrdinalIgnoreCase)
+    || tagName.Equals(nameof(GameTag.PREMIUM), StringComparison.OrdinalIgnoreCase)
+    || tagName.Equals(nameof(GameTag.TAUNT), StringComparison.OrdinalIgnoreCase)
+    || tagName.Equals(nameof(GameTag.DIVINE_SHIELD), StringComparison.OrdinalIgnoreCase)
+    || tagName.Equals(nameof(GameTag.CONTROLLER), StringComparison.OrdinalIgnoreCase);
 
     private static bool IsOpponentPairingTag(string tagName) =>
         tagName.Equals(nameof(GameTag.NEXT_OPPONENT_PLAYER_ID), StringComparison.OrdinalIgnoreCase)

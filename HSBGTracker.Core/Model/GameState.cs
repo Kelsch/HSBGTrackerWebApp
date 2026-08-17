@@ -41,6 +41,25 @@ public sealed class GameState
     private readonly Dictionary<int, List<Entity>> _lastKnownBoards = new();
     private readonly Dictionary<int, List<Entity>> _lastKnownAttachments = new();
 
+    private int? _combatSnapshotTakenForOpponent;
+    private int? _combatSnapshotOpponent;
+    private bool _combatHasStarted;
+
+    public bool CombatHasStarted => _combatHasStarted;
+
+    public void MarkCombatStarted()
+    {
+        _combatHasStarted = true;
+    }
+
+    public void MarkCombatSnapshotTaken(int opponentPlayerId)
+    {
+        _combatSnapshotTakenForOpponent = opponentPlayerId;
+    }
+
+    public bool HasTakenCombatSnapshot(int opponentPlayerId) =>
+        _combatSnapshotTakenForOpponent == opponentPlayerId;
+
     /// <summary>Call after any tag mutation that could affect board state. Cheap no-op unless
     /// the player currently has minions in PLAY. Clones the live board so the snapshot survives
     /// later combat/end-of-game cleanup that mutates the same entities out of PLAY.</summary>
@@ -305,18 +324,79 @@ public sealed class GameState
         player.CurrentOpponentPlayerId = opponentPlayerId;
         player.LastOpponentPlayerId = opponentPlayerId;
 
-        // New pairing: drop the previous opponent's combat snapshot so we can recapture.
-        _lastKnownBoards.Remove(opponentPlayerId);
-        _lastKnownAttachments.Remove(opponentPlayerId);
+        // Capture both boards, but do NOT wipe a previously good cache
         RefreshLastKnownBoard(playerId);
-        RefreshLastKnownBoard(opponentPlayerId);
+        RefreshLastKnownBoard(opponentPlayerId);   // will only overwrite if it finds minions
+
+        // Explicitly remember hero if we already know it
+        var opponent = GetOrCreatePlayer(opponentPlayerId);
+        if (string.IsNullOrEmpty(opponent.HeroCardId))
+        {
+            var hero = GetHero(opponentPlayerId);
+            if (hero?.CardId is not null)
+                opponent.HeroCardId = hero.CardId;
+        }
+
+        var trinkets = GetTrinkets(opponentPlayerId);
+        if (trinkets.Count > 0)
+        {
+            // store them somewhere if you want (you may need a _lastKnownTrinkets dictionary)
+        }
+
+        var liveCount = GetBoard(opponentPlayerId).Count;
+        var cachedCount = _lastKnownBoards.TryGetValue(opponentPlayerId, out var cached) ? cached.Count : 0;
+
+        Console.WriteLine(
+            $"[board-debug] Pairing {playerId} vs {opponentPlayerId} | " +
+            $"live board={liveCount} | cached board={cachedCount}");
 
         if (playerId == FriendlyPlayerId)
         {
             CurrentOpponentPlayerId = opponentPlayerId;
             LastOpponentPlayerId = opponentPlayerId;
+
+            //_combatSnapshotTakenForOpponent = null;
+            _combatSnapshotOpponent = null;
+            _combatHasStarted = false;
+
             OpponentPaired?.Invoke(playerId, opponentPlayerId);
         }
+    }
+
+    public void SetCombatBoard(int opponentPlayerId, List<Entity> board)
+    {
+        if (board.Count == 0) return;
+
+        if (_lastKnownBoards.TryGetValue(opponentPlayerId, out var existing))
+        {
+            // Keep the larger board – the real pre-combat board is almost always bigger
+            // than the later token-only versions.
+            if (existing.Count >= board.Count)
+                return;
+
+            // Optional extra filter – reject boards that are almost pure tokens
+            //var uniqueCards = board.Select(m => m.CardId).Distinct().Count();
+            //if (uniqueCards <= 1 && board.Count > 3)
+            //    return; // probably just a bunch of the same beetle
+        }
+
+        _lastKnownBoards[opponentPlayerId] = board;
+        _combatSnapshotOpponent = opponentPlayerId;
+
+        Console.WriteLine($"[combat-debug] Updated opponent {opponentPlayerId} board → {board.Count} minions");
+    }
+
+    public void SetLastKnownBoard(int playerId, List<Entity> board)
+    {
+        if (playerId == 0 || board.Count == 0) return;
+
+        _lastKnownBoards[playerId] = board;
+
+        var boardIds = board.Select(e => e.Id).ToHashSet();
+        _lastKnownAttachments[playerId] = Entities.Values
+            .Where(e => e.AttachedToEntityId != 0 && boardIds.Contains(e.AttachedToEntityId))
+            .Select(e => e.Clone())
+            .ToList();
     }
 
     /// <summary>
