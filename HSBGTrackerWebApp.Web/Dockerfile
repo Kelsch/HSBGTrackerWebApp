@@ -9,7 +9,7 @@ COPY ["HSBGTracker.Core/HSBGTracker.Core.csproj", "HSBGTracker.Core/"]
 RUN dotnet restore "HSBGTrackerWebApp.Web/HSBGTrackerWebApp.Web.csproj"
 COPY . .
 WORKDIR /src/HSBGTrackerWebApp.Web
-RUN dotnet publish -c Release -o /app/publish --no-restore
+RUN dotnet publish -c Release -o /app/publish
 
 RUN echo "=== looking for blazor.web.js ===" && \
     find /root/.nuget -name "blazor.web.js" 2>/dev/null | head -20 && \
