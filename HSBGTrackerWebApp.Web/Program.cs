@@ -61,9 +61,6 @@ app.UseOutputCache();
 app.MapRazorComponents<App>()
     .AddInteractiveServerRenderMode();
 
-app.UseRouting();
-app.MapBlazorHub();
-
 app.MapDefaultEndpoints();
 
 app.Run();

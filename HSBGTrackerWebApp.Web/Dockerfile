@@ -11,6 +11,10 @@ COPY . .
 WORKDIR /src/HSBGTrackerWebApp.Web
 RUN dotnet publish -c Release -o /app/publish --no-restore
 
+RUN echo "=== wwwroot ===" && ls -la /app/publish/wwwroot && \
+    echo "=== _framework ===" && ls -la /app/publish/wwwroot/_framework && \
+    test -f /app/publish/wwwroot/_framework/blazor.web.js
+
 FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS final
 WORKDIR /app
 COPY --from=build /app/publish .
