@@ -1,8 +1,11 @@
+using Dapper;
 using HSBGTrackerWebApp.Api.Auth;
 using HSBGTrackerWebApp.Api.Data;
 using HSBGTrackerWebApp.Api.Services;
 
 var builder = WebApplication.CreateBuilder(args);
+
+SqlMapper.AddTypeHandler(new GuidAsStringHandler());
 
 // Add service defaults & Aspire client integrations.
 builder.AddServiceDefaults();
