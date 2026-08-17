@@ -109,8 +109,8 @@ public sealed class GameRepository : IGameRepository
 
             WHERE (g.Visibility = 1 OR g.OwnerUserId = @RequestingUserId)
               AND (@OwnerUserId IS NULL OR g.OwnerUserId = @OwnerUserId)
-            ORDER BY g.PlayedAtUtc DESC
-            OFFSET @Offset ROWS FETCH NEXT @PageSize ROWS ONLY
+            ORDER BY PlayedAtUtc DESC
+            LIMIT @PageSize OFFSET @Offset
             """,
             new
             {
