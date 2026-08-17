@@ -27,6 +27,9 @@
             }
         </section>
 
+        <button type="button" @onclick="TestClick">Test click</button>
+        <p>@_registerError</p>
+
         <section class="connect-panel">
             <h2>New here?</h2>
             <div class="connect-form connect-form-register">
@@ -60,6 +63,12 @@
     private string? _connectError;
     private string? _registerError;
     private string? _issuedApiKey;
+
+    private void TestClick()
+    {
+        _registerError = "Click reached the server at " + DateTime.Now.ToLongTimeString();
+        Console.WriteLine("TestClick hit");
+    }
 
     private async Task ConnectAsync() => await TryConnectAsync(_apiKeyInput);
 
