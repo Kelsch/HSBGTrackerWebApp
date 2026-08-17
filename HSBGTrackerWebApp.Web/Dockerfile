@@ -1,7 +1,9 @@
-FROM mcr.microsoft.com/dotnet/sdk:8.0 AS build
+FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
 WORKDIR /src
 
 COPY ["HSBGTrackerWebApp.Web/HSBGTrackerWebApp.Web.csproj", "HSBGTrackerWebApp.Web/"]
+COPY ["HSBGTrackerWebApp.ServiceDefaults/HSBGTrackerWebApp.ServiceDefaults.csproj", "HSBGTrackerWebApp.ServiceDefaults/"]
+COPY ["HSBGTracker.Core/HSBGTracker.Core.csproj", "HSBGTracker.Core/"]
 # Add project references if the Web project depends on shared libraries
 
 RUN dotnet restore "HSBGTrackerWebApp.Web/HSBGTrackerWebApp.Web.csproj"

@@ -1,10 +1,10 @@
 # ---------- build ----------
-FROM mcr.microsoft.com/dotnet/sdk:8.0 AS build
+FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
 WORKDIR /src
 
 # Copy csproj files first for better layer caching
 COPY ["HSBGTrackerWebApp.ApiService/HSBGTrackerWebApp.ApiService.csproj", "HSBGTrackerWebApp.ApiService/"]
-# Add other project references if needed
+COPY ["HSBGTrackerWebApp.ServiceDefaults/HSBGTrackerWebApp.ServiceDefaults.csproj", "HSBGTrackerWebApp.ServiceDefaults/"]
 COPY ["HSBGTracker.Core/HSBGTracker.Core.csproj", "HSBGTracker.Core/"]
 # etc.
 
