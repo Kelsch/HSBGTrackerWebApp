@@ -61,6 +61,12 @@ app.UseOutputCache();
 app.MapRazorComponents<App>()
     .AddInteractiveServerRenderMode();
 
+if (app.Environment.IsEnvironment("Docker") == false) 
+{
+    app.UseRouting();
+    app.MapBlazorHub(); 
+}
+
 app.MapDefaultEndpoints();
 
 app.Run();
