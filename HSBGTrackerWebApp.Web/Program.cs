@@ -42,7 +42,10 @@ var app = builder.Build();
 if (app.Environment.IsDevelopment() == false)
 {
     app.UseExceptionHandler("/Error", createScopeForErrors: true);
-    app.UseHsts();
+    if (app.Environment.IsEnvironment("Docker") == false)
+    {
+        app.UseHsts();
+    }
 }
 
 if (app.Environment.IsEnvironment("Docker") == false)
@@ -50,8 +53,6 @@ if (app.Environment.IsEnvironment("Docker") == false)
     app.UseHttpsRedirection();
 }
 
-app.UseHttpsRedirection();
-app.UseStaticFiles();
 app.UseAntiforgery();
 
 app.MapStaticAssets();
