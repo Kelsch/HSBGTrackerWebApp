@@ -209,27 +209,6 @@ public sealed class GameStateApplier
                 }
 
             case BlockStartPacket block:
-                //if (block.BlockType.Equals("ATTACK", StringComparison.OrdinalIgnoreCase)
-                //    && _state.CurrentOpponentPlayerId is int attackOpponent
-                //    && _state.FriendlyPlayerId is int friendlyId
-                //    && _state.HasTakenCombatSnapshot(attackOpponent) == false)
-                //{
-                //    var opponentMinions = _state.Entities.Values
-                //        .Where(e => e.CardType == CardType.MINION
-                //                 && e.Zone == Zone.PLAY
-                //                 && e.ControllerPlayerId != friendlyId)
-                //        .OrderBy(e => e.ZonePosition)
-                //        .Select(e => e.Clone())
-                //        .ToList();
-
-                //    if (opponentMinions.Count > 0)
-                //    {
-                //        _state.SetLastKnownBoard(attackOpponent, opponentMinions);
-                //        _state.MarkCombatSnapshotTaken(attackOpponent);
-
-                //        Console.WriteLine($"[combat-debug] First-attack snapshot: {opponentMinions.Count} minions for player {attackOpponent}");
-                //    }
-                //}
                 if (block.BlockType.Equals("ATTACK", StringComparison.OrdinalIgnoreCase))
                 {
                     _state.MarkCombatStarted();   // lock the snapshot
