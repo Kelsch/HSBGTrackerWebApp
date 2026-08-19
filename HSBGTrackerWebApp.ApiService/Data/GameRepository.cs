@@ -108,7 +108,10 @@ public sealed class GameRepository : IGameRepository
             SelectWithOwnerNames + """
 
             WHERE (g.Visibility = 1 OR g.OwnerUserId = @RequestingUserId)
-              AND (@OwnerUserId IS NULL OR g.OwnerUserId = @OwnerUserId)
+              AND (
+                    (@OwnerUserId IS NULL AND g.Placement = 1)
+                 OR (@OwnerUserId IS NOT NULL AND g.OwnerUserId = @OwnerUserId)
+              )
             ORDER BY PlayedAtUtc DESC
             LIMIT @PageSize OFFSET @Offset
             """,
