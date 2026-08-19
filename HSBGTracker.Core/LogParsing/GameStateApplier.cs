@@ -509,6 +509,11 @@ public sealed class GameStateApplier
     {
         if (int.TryParse(rawValue, out var numericValue) == false)
         {
+            if (tagName is null)
+            {
+                return;
+            }
+
             // Named enums for a few non-numeric values
             if (tagName.Equals(nameof(GameTag.ZONE), StringComparison.OrdinalIgnoreCase)
                 && Enum.TryParse<Zone>(rawValue, out var zone))
