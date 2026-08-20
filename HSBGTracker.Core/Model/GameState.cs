@@ -47,10 +47,10 @@ public sealed class GameState
 
     public bool CombatHasStarted => _combatHasStarted;
 
-    public void MarkCombatStarted()
-    {
-        _combatHasStarted = true;
-    }
+    public bool IsCombatActive { get; private set; }
+
+    public void MarkCombatStarted() => IsCombatActive = true;
+    public void MarkCombatEnded() => IsCombatActive = false;
 
     public void MarkCombatSnapshotTaken(int opponentPlayerId)
     {
@@ -86,6 +86,23 @@ public sealed class GameState
             .Select(e => e.Clone())
             .ToList();
     }
+
+    private readonly Dictionary<int, List<Entity>> _lastKnownTrinkets = new();
+
+    public void RefreshLastKnownTrinkets(int playerId)
+    {
+        if (playerId == 0) return;
+
+        var trinkets = Entities.Values
+            .Where(e => e.ControllerPlayerId == playerId && e.CardType == CardType.TRINKET && e.Zone == Zone.PLAY)
+            .ToList();
+
+        if (trinkets.Count == 0) return;
+
+        _lastKnownTrinkets[playerId] = trinkets.Select(e => e.Clone()).ToList();
+    }
+
+    public IReadOnlyList<Entity> GetFinalTrinkets(int playerId) => _lastKnownTrinkets.TryGetValue(playerId, out var trinkets) ? trinkets : Array.Empty<Entity>();
 
     /// <summary>Prefer this over GetBoard for anything taken at/after game end - falls back to a
     /// live GetBoard if no cached board was ever captured (e.g. player had an empty board).</summary>
@@ -337,7 +354,8 @@ public sealed class GameState
                 opponent.HeroCardId = hero.CardId;
         }
 
-        var trinkets = GetTrinkets(opponentPlayerId);
+        //var trinkets = GetTrinkets(opponentPlayerId);
+        var trinkets = GetFinalTrinkets(opponentPlayerId);
         if (trinkets.Count > 0)
         {
             // store them somewhere if you want (you may need a _lastKnownTrinkets dictionary)
@@ -423,6 +441,8 @@ public sealed class GameState
     /// </summary>
     public void NotifyPlaystateChanged(int playerId, int playstate)
     {
+        Console.WriteLine($"[diag] NotifyPlaystateChanged playerId={playerId} playstate={playstate}");
+
         if (playerId == 0 || playerId == 10) return;
 
         const int Won = 4;
@@ -440,6 +460,8 @@ public sealed class GameState
             ?? (playstate == Won ? 1 : 0);
 
         if (place <= 0) return;
+
+        Console.WriteLine($"[diag] -> eliminating playerId={playerId} place={place} " + $"(pending was {player.PendingLeaderboardPlace?.ToString() ?? "null"})");
 
         MarkEliminated(playerId, place);
     }

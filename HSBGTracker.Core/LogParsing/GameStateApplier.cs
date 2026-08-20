@@ -8,6 +8,9 @@ namespace HSBGTracker.Core.LogParsing;
 /// </summary>
 public sealed class GameStateApplier
 {
+    private int _blockDepth; 
+    private int? _combatLockDepth;
+
     private readonly GameState _state;
 
     /// <summary>Fires for every TAG_CHANGE processed. Diagnostic-only for now - lets a
@@ -16,6 +19,7 @@ public sealed class GameStateApplier
     public event Action<int, string, string>? TagChanged;
 
     public GameStateApplier(GameState state) => _state = state;
+
 
     public void Apply(LogPacket packet)
     {
@@ -54,6 +58,7 @@ public sealed class GameStateApplier
                     MaybeCaptureHero(entity);
                     MaybeCaptureOpponent(entity);
                     MaybeRefreshBoard(entity);
+                    MaybeRefreshTrinkets(entity);
 
                     if (entity.AttachedToEntityId != 0
                         && _state.Entities.TryGetValue(entity.AttachedToEntityId, out var host)
@@ -101,6 +106,7 @@ public sealed class GameStateApplier
                     MaybeCaptureHero(entity);
                     MaybeCaptureOpponent(entity);
                     MaybeRefreshBoard(entity);
+                    MaybeRefreshTrinkets(entity);
 
                     if (entity.AttachedToEntityId != 0
                         && _state.Entities.TryGetValue(entity.AttachedToEntityId, out var host)
@@ -140,6 +146,7 @@ public sealed class GameStateApplier
                     if (IsBoardRelevantTag(tagChange.TagName))
                     {
                         MaybeRefreshBoard(entity);
+                        MaybeRefreshTrinkets(entity);
                     }
 
                     TryUpdatePreCombatOpponentBoard();
@@ -198,24 +205,37 @@ public sealed class GameStateApplier
                     if (tagChange.TagName == nameof(GameTag.PLAYSTATE) && ownerPlayerId != 0)
                     {
                         var playstate = ParsePlaystate(tagChange.RawValue);
+                        Console.WriteLine(
+                            $"[diag] PLAYSTATE entity={id.Value} rawEntity={tagChange.Entity} " +
+                            $"ownerPlayerId={ownerPlayerId} raw='{tagChange.RawValue}' parsed={playstate} " +
+                            $"combatLocked={_combatLockDepth}"); // <-- remove/adjust if there's no such property; that's exactly what I need to know
                         if (playstate is int ps)
                             _state.NotifyPlaystateChanged(ownerPlayerId, ps);
                     }
 
                     MaybeCaptureHero(entity);
                     MaybeRefreshBoard(entity);
+                    MaybeRefreshTrinkets(entity);
 
                     break;
                 }
 
             case BlockStartPacket block:
+                _blockDepth++;
                 if (block.BlockType.Equals("ATTACK", StringComparison.OrdinalIgnoreCase))
                 {
-                    _state.MarkCombatStarted();   // lock the snapshot
+                    _state.MarkCombatStarted();
+                    _combatLockDepth = _blockDepth;
                 }
                 break;
 
             case BlockEndPacket:
+                if (_combatLockDepth == _blockDepth)
+                {
+                    _state.MarkCombatEnded();
+                    _combatLockDepth = null;
+                }
+                _blockDepth--;
                 break;
         }
     }
@@ -300,9 +320,16 @@ public sealed class GameStateApplier
     private void MaybeCaptureHero(Entity entity)
     {
         var isHero = entity.CardType == CardType.HERO
-            || (entity.CardId is not null
-                && entity.CardId.Contains("BaconShop_HERO", StringComparison.OrdinalIgnoreCase));
+        || (entity.CardId is not null
+            && entity.CardId.Contains("BaconShop_HERO", StringComparison.OrdinalIgnoreCase));
         if (!isHero || string.IsNullOrEmpty(entity.CardId))
+            return;
+
+        // Hero pick offers several HERO-type entities as options before you choose one -
+        // only the one that actually reaches PLAY is your real hero. Without this check,
+        // whichever hero-typed entity happens to be touched *last* wins, which can just
+        // as easily be an option you didn't pick.
+        if (entity.Zone != Zone.PLAY)
             return;
 
         var playerId = ResolveOwnerFromEntity(entity);
@@ -322,18 +349,11 @@ public sealed class GameStateApplier
         player.HeroCardId = entity.CardId;
     }
 
-    //private void MaybeRefreshOpponentBoard(Entity entity)
-    //{
-    //    if (entity.CardType != CardType.MINION || entity.Zone != Zone.PLAY)
-    //        return;
-
-    //    var controller = entity.ControllerPlayerId;
-    //    if (controller != 0 && controller == _state.CurrentOpponentPlayerId)
-    //        _state.RefreshLastKnownBoard(controller, onlyIfRicher: true);
-    //}
-
     private void MaybeRefreshBoard(Entity entity)
     {
+        if (_state.IsCombatActive)
+            return;
+
         // Only care about real minions that are (or just were) on a board
         if (entity.CardType != CardType.MINION)
             return;
@@ -354,6 +374,17 @@ public sealed class GameStateApplier
             || controller == _state.LastOpponentPlayerId)
         {
             _state.RefreshLastKnownBoard(controller, onlyIfRicher: true);
+        }
+    }
+
+    private void MaybeRefreshTrinkets(Entity entity)
+    {
+        if (entity.CardType != CardType.TRINKET)
+            return;
+
+        if (entity.ControllerPlayerId == _state.FriendlyPlayerId)
+        {
+            _state.RefreshLastKnownTrinkets(entity.ControllerPlayerId);
         }
     }
 
@@ -409,34 +440,49 @@ public sealed class GameStateApplier
 
         // BattleTag (Name#1234). Do not assign every # token to the friendly player -
         // opponent names also appear this way on PLAYSTATE / leaderboard lines.
+        //if (token.Contains('#', StringComparison.Ordinal))
+        //{
+        //    int? targetPlayerId = _state.FriendlyPlayerId;
+        //    foreach (var (entityId, playerId) in GetPlayerMappings())
+        //    {
+        //        if (playerId == 10)
+        //            continue;
+        //        if (targetPlayerId is null || playerId == targetPlayerId)
+        //        {
+        //            _state.RegisterPlayerName(token, entityId);
+        //            return entityId;
+        //        }
+        //    }
+        //}
+        // BattleTag (Name#1234). Match against each player's actual registered DisplayName -
+        // set via RegisterPlayerDisplayName from the DebugPrintGamePlayer line, so this is a
+        // real identity check instead of "grab whichever player happens to be friendly."
         if (token.Contains('#', StringComparison.Ordinal))
         {
-            //if (_state.FriendlyPlayerId is int friendlyId)
-            //{
-            //    var friendly = _state.GetOrCreatePlayer(friendlyId);
-            //    if (string.IsNullOrWhiteSpace(friendly.DisplayName))
-            //    {
-            //        foreach (var (entityId, playerId) in GetPlayerMappings())
-            //        {
-            //            if (playerId == friendlyId)
-            //            {
-            //                _state.RegisterPlayerName(token, entityId);
-            //                return entityId;
-            //            }
-            //        }
-            //    }
-            //}
-            int? targetPlayerId = _state.FriendlyPlayerId;
+            var namePart = token.Split('#')[0]; // defensive, in case a token ever shows up
+                                                // without the discriminator that DisplayName has
+
             foreach (var (entityId, playerId) in GetPlayerMappings())
             {
                 if (playerId == 10)
                     continue;
-                if (targetPlayerId is null || playerId == targetPlayerId)
+
+                var displayName = _state.GetOrCreatePlayer(playerId).DisplayName;
+                if (string.IsNullOrWhiteSpace(displayName))
+                    continue;
+
+                if (displayName.Equals(token, StringComparison.OrdinalIgnoreCase)
+                    || displayName.Equals(namePart, StringComparison.OrdinalIgnoreCase))
                 {
                     _state.RegisterPlayerName(token, entityId);
                     return entityId;
                 }
             }
+
+            // Not resolvable yet (their PlayerNamePacket hasn't landed at this point in the
+            // log) - return null and let TryApplyUnresolvedPairingTag's fallback handle it,
+            // same as it already does for the friendly player's own unresolved tokens.
+            return null;
         }
 
         return _state.ResolvePlayerEntityIdByName(token);
