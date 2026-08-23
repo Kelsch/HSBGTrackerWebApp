@@ -42,21 +42,18 @@ public sealed class BattlegroundsLogService : IDisposable
         if (startLiveTailing)
         {
             _tailer = powerLogPath is not null
-                ? new LogFileTailer(powerLogPath)
+                ? new LogFileTailer(powerLogPath, startAtEndOfFile: false)
                 : hearthstoneInstallPath is not null
-                    ? new LogFileTailer(() => LogConfigWriter.FindLatestSessionPowerLog(hearthstoneInstallPath) ?? LogConfigWriter.DefaultPowerLogPath)
-                    : new LogFileTailer(LogConfigWriter.DefaultPowerLogPath);
+                ? new LogFileTailer(() => LogConfigWriter.FindLatestSessionPowerLog(hearthstoneInstallPath) ?? LogConfigWriter.DefaultPowerLogPath, startAtEndOfFile: false)
+                : new LogFileTailer(LogConfigWriter.DefaultPowerLogPath, startAtEndOfFile: false);
             _tailer.LineRead += OnLineRead;
             _tailer.PathChanged += path => Console.WriteLine($"[diagnostic] Now tailing: {path}");
 
-            // More reliable than the FULL_ENTITY hand-reveal heuristic - Zone.log labels the
-            // friendly player explicitly via local=True, and works in Battlegrounds where hand
-            // visibility doesn't behave like constructed Hearthstone.
             _zoneTailer = zoneLogPath is not null
-                ? new LogFileTailer(zoneLogPath)
+                ? new LogFileTailer(zoneLogPath, startAtEndOfFile: false)
                 : hearthstoneInstallPath is not null
-                    ? new LogFileTailer(() => LogConfigWriter.FindLatestSessionZoneLog(hearthstoneInstallPath) ?? LogConfigWriter.DefaultZoneLogPath)
-                    : new LogFileTailer(LogConfigWriter.DefaultZoneLogPath);
+                    ? new LogFileTailer(() => LogConfigWriter.FindLatestSessionZoneLog(hearthstoneInstallPath) ?? LogConfigWriter.DefaultZoneLogPath, startAtEndOfFile: false)
+                    : new LogFileTailer(LogConfigWriter.DefaultZoneLogPath, startAtEndOfFile: false);
             _zoneTailer.LineRead += OnZoneLineRead;
         }
     }

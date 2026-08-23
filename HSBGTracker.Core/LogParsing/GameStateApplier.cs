@@ -59,6 +59,7 @@ public sealed class GameStateApplier
                     MaybeCaptureOpponent(entity);
                     MaybeRefreshBoard(entity);
                     MaybeRefreshTrinkets(entity);
+                    MaybeRefreshHeroPower(entity);
 
                     if (entity.AttachedToEntityId != 0
                         && _state.Entities.TryGetValue(entity.AttachedToEntityId, out var host)
@@ -107,6 +108,7 @@ public sealed class GameStateApplier
                     MaybeCaptureOpponent(entity);
                     MaybeRefreshBoard(entity);
                     MaybeRefreshTrinkets(entity);
+                    MaybeRefreshHeroPower(entity);
 
                     if (entity.AttachedToEntityId != 0
                         && _state.Entities.TryGetValue(entity.AttachedToEntityId, out var host)
@@ -147,6 +149,7 @@ public sealed class GameStateApplier
                     {
                         MaybeRefreshBoard(entity);
                         MaybeRefreshTrinkets(entity);
+                        MaybeRefreshHeroPower(entity);
                     }
 
                     TryUpdatePreCombatOpponentBoard();
@@ -216,6 +219,7 @@ public sealed class GameStateApplier
                     MaybeCaptureHero(entity);
                     MaybeRefreshBoard(entity);
                     MaybeRefreshTrinkets(entity);
+                    MaybeRefreshHeroPower(entity);
 
                     break;
                 }
@@ -385,6 +389,17 @@ public sealed class GameStateApplier
         if (entity.ControllerPlayerId == _state.FriendlyPlayerId)
         {
             _state.RefreshLastKnownTrinkets(entity.ControllerPlayerId);
+        }
+    }
+
+    private void MaybeRefreshHeroPower(Entity entity)
+    {
+        if (entity.CardType != CardType.HERO_POWER)
+            return;
+
+        if (entity.ControllerPlayerId == _state.FriendlyPlayerId && entity.Zone == Zone.PLAY)
+        {
+            _state.RefreshLastKnownHeroPower(entity.ControllerPlayerId, entity);
         }
     }
 

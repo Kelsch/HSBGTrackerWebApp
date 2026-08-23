@@ -260,6 +260,19 @@ public sealed class GameState
     public Entity? GetHeroPower(int playerId) =>
         Entities.Values.FirstOrDefault(e => e.ControllerPlayerId == playerId && e.CardType == CardType.HERO_POWER);
 
+    private readonly Dictionary<int, Entity> _lastKnownHeroPower = new();
+
+    public void RefreshLastKnownHeroPower(int playerId, Entity entity)
+    {
+        if (playerId == 0) return;
+        _lastKnownHeroPower[playerId] = entity.Clone();
+    }
+
+    /// <summary>Prefer this over GetHeroPower for anything taken at/after game end - falls
+    /// back to a live GetHeroPower if none was ever captured.</summary>
+    public Entity? GetFinalHeroPower(int playerId) =>
+        _lastKnownHeroPower.TryGetValue(playerId, out var hp) ? hp : GetHeroPower(playerId);
+
     public Entity? GetHero(int playerId) =>
         Entities.Values.FirstOrDefault(e =>
             e.ControllerPlayerId == playerId

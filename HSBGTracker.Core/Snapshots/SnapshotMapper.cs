@@ -23,7 +23,8 @@ public static class SnapshotMapper
         var byHost = attachments.ToLookup(a => a.AttachedToEntityId);
         //var trinkets = state.GetTrinkets(playerId);
         var trinkets = state.GetFinalTrinkets(playerId);
-        var heroPower = state.GetHeroPower(playerId);
+        //var heroPower = state.GetHeroPower(playerId);
+        var heroPower = state.GetFinalHeroPower(playerId);
         var hero = state.GetHero(playerId);
 
         return new BoardSnapshot
