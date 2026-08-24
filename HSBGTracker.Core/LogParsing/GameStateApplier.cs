@@ -135,16 +135,24 @@ public sealed class GameStateApplier
                     var id = ResolveId(tagChange.Entity);
                     if (id is null)
                     {
-                        // Pairing is often logged as Entity=YourName#1234. If we haven't
-                        // mapped that token yet, still apply it to the friendly player.
-                        TryApplyUnresolvedPairingTag(tagChange);
+                        if (IsOpponentPairingTag(tagChange.TagName))
+                        {
+                            TryApplyUnresolvedPairingTag(tagChange);
+                        }
+                        else
+                        {
+                            Console.WriteLine(
+                                $"[diag] Dropped unresolved TagChange: Entity='{tagChange.Entity.RawToken}' " +
+                                $"tag={tagChange.TagName} value={tagChange.RawValue}");
+                        }
                         break;
                     }
 
                     var entity = _state.GetOrCreateEntity(id.Value);
                     ApplyTag(entity, tagChange.TagName, tagChange.RawValue);
 
-                    // Refresh boards when something important about a minion changes
+                    // Refresh boar
+                    // ds when something important about a minion changes
                     if (IsBoardRelevantTag(tagChange.TagName))
                     {
                         MaybeRefreshBoard(entity);
@@ -260,9 +268,9 @@ public sealed class GameStateApplier
 
         if (opponentMinions.Count > 0)
         {
-            Console.WriteLine(
-    $"[pre-combat] opp={oppId} count={opponentMinions.Count} " +
-    $"cards=[{string.Join(", ", opponentMinions.Select(m => m.CardId))}]");
+    //        Console.WriteLine(
+    //$"[pre-combat] opp={oppId} count={opponentMinions.Count} " +
+    //$"cards=[{string.Join(", ", opponentMinions.Select(m => m.CardId))}]");
 
             _state.SetCombatBoard(oppId, opponentMinions);
         }
@@ -537,7 +545,7 @@ public sealed class GameStateApplier
     {
         foreach (var entity in _state.Entities.Values)
         {
-            if (entity.CardType == CardType.PLAYER && entity.ControllerPlayerId != 0)
+            if (entity is not null && entity.CardType == CardType.PLAYER && entity.ControllerPlayerId != 0)
             {
                 yield return (entity.Id, entity.ControllerPlayerId);
             }

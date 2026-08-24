@@ -222,7 +222,7 @@ public sealed class GameState
         CurrentOpponentPlayerId = null;
         LastOpponentPlayerId = null;
         _entityIdToPlayerId.Clear();
-        _nameToEntityId.Clear();
+        //_nameToEntityId.Clear();
         _lastKnownBoards.Clear();
         _lastKnownAttachments.Clear();
     }
