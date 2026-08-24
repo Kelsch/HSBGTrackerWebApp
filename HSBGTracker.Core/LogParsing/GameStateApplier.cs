@@ -236,10 +236,6 @@ public sealed class GameStateApplier
 
         if (opponentMinions.Count > 0)
         {
-    //        Console.WriteLine(
-    //$"[pre-combat] opp={oppId} count={opponentMinions.Count} " +
-    //$"cards=[{string.Join(", ", opponentMinions.Select(m => m.CardId))}]");
-
             _state.SetCombatBoard(oppId, opponentMinions);
         }
     }
