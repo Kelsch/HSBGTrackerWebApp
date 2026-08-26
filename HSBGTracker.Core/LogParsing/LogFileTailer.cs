@@ -41,8 +41,18 @@ public sealed class LogFileTailer : IDisposable
         _timer = new Timer(_ => Poll(), null, interval, interval);
     }
 
+    private int _isPolling; // 0 = idle, 1 = running
+
     private void Poll()
     {
+        if (Interlocked.CompareExchange(ref _isPolling, 1, 0) != 0)
+        {
+            // Previous poll is still processing a burst - skip this tick rather than
+            // run concurrently with it. Position only advances after lines are
+            // actually read, so nothing is lost, it's just picked up next tick.
+            return;
+        }
+
         try
         {
             var resolved = _resolvePath();

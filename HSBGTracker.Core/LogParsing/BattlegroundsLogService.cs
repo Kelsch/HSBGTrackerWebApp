@@ -52,35 +52,42 @@ public sealed class BattlegroundsLogService : IDisposable
             // More reliable than the FULL_ENTITY hand-reveal heuristic - Zone.log labels the
             // friendly player explicitly via local=True, and works in Battlegrounds where hand
             // visibility doesn't behave like constructed Hearthstone.
-            _zoneTailer = zoneLogPath is not null
-                ? new LogFileTailer(zoneLogPath)
-                : hearthstoneInstallPath is not null
-                    ? new LogFileTailer(() => LogConfigWriter.FindLatestSessionZoneLog(hearthstoneInstallPath) ?? LogConfigWriter.DefaultZoneLogPath)
-                    : new LogFileTailer(LogConfigWriter.DefaultZoneLogPath);
-            _zoneTailer.LineRead += OnZoneLineRead;
+            //_zoneTailer = zoneLogPath is not null
+            //    ? new LogFileTailer(zoneLogPath)
+            //    : hearthstoneInstallPath is not null
+            //        ? new LogFileTailer(() => LogConfigWriter.FindLatestSessionZoneLog(hearthstoneInstallPath) ?? LogConfigWriter.DefaultZoneLogPath)
+            //        : new LogFileTailer(LogConfigWriter.DefaultZoneLogPath);
+            //_zoneTailer.LineRead += OnZoneLineRead;
         }
     }
 
+    private readonly object _stateLock = new();
 
     private void OnLineRead(string line)
     {
-        TotalLinesProcessed++;
-        foreach (var packet in _parser.ParseLine(line))
+        lock (_stateLock)
         {
-            RecognizedPackets++;
-            _applier.Apply(packet);
+            TotalLinesProcessed++;
+            foreach (var packet in _parser.ParseLine(line))
+            {
+                RecognizedPackets++;
+                _applier.Apply(packet);
+            }
         }
     }
 
-    private void OnZoneLineRead(string line)
-    {
-        if (State.FriendlyPlayerId is null)
-        {
-            var friendlyId = _zoneParser.TryGetFriendlyPlayerId(line);
-            if (friendlyId is not null)
-                State.FriendlyPlayerId = friendlyId;
-        }
-    }
+    //private void OnZoneLineRead(string line)
+    //{
+    //    lock (_stateLock)
+    //    {
+    //        if (State.FriendlyPlayerId is null)
+    //        {
+    //            var friendlyId = _zoneParser.TryGetFriendlyPlayerId(line);
+    //            if (friendlyId is not null)
+    //                State.FriendlyPlayerId = friendlyId;
+    //        }
+    //    }
+    //}
 
     public void ReplayFile(string powerLogPath, string? zoneLogPath = null)
     {
@@ -89,13 +96,13 @@ public sealed class BattlegroundsLogService : IDisposable
             OnLineRead(line);
         }
 
-        if (zoneLogPath is not null)
-        {
-            foreach (var line in File.ReadLines(zoneLogPath))
-            {
-                OnZoneLineRead(line);
-            }
-        }
+        //if (zoneLogPath is not null)
+        //{
+        //    foreach (var line in File.ReadLines(zoneLogPath))
+        //    {
+        //        OnZoneLineRead(line);
+        //    }
+        //}
 
         var trailing = _parser.FlushPending();
         if (trailing is not null)
