@@ -439,7 +439,7 @@ public sealed class GameState
         var place = player.PendingLeaderboardPlace
             ?? (playstate == Won ? 1 : 0);
 
-        if (place <= 0) return;
+        //if (place <= 0) return;
 
         MarkEliminated(playerId, place);
     }

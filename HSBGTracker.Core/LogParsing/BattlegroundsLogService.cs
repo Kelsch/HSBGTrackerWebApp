@@ -48,16 +48,6 @@ public sealed class BattlegroundsLogService : IDisposable
                     : new LogFileTailer(LogConfigWriter.DefaultPowerLogPath);
             _tailer.LineRead += OnLineRead;
             _tailer.PathChanged += path => Console.WriteLine($"[diagnostic] Now tailing: {path}");
-
-            // More reliable than the FULL_ENTITY hand-reveal heuristic - Zone.log labels the
-            // friendly player explicitly via local=True, and works in Battlegrounds where hand
-            // visibility doesn't behave like constructed Hearthstone.
-            //_zoneTailer = zoneLogPath is not null
-            //    ? new LogFileTailer(zoneLogPath)
-            //    : hearthstoneInstallPath is not null
-            //        ? new LogFileTailer(() => LogConfigWriter.FindLatestSessionZoneLog(hearthstoneInstallPath) ?? LogConfigWriter.DefaultZoneLogPath)
-            //        : new LogFileTailer(LogConfigWriter.DefaultZoneLogPath);
-            //_zoneTailer.LineRead += OnZoneLineRead;
         }
     }
 
@@ -76,33 +66,12 @@ public sealed class BattlegroundsLogService : IDisposable
         }
     }
 
-    //private void OnZoneLineRead(string line)
-    //{
-    //    lock (_stateLock)
-    //    {
-    //        if (State.FriendlyPlayerId is null)
-    //        {
-    //            var friendlyId = _zoneParser.TryGetFriendlyPlayerId(line);
-    //            if (friendlyId is not null)
-    //                State.FriendlyPlayerId = friendlyId;
-    //        }
-    //    }
-    //}
-
     public void ReplayFile(string powerLogPath, string? zoneLogPath = null)
     {
         foreach (var line in File.ReadLines(powerLogPath))
         {
             OnLineRead(line);
         }
-
-        //if (zoneLogPath is not null)
-        //{
-        //    foreach (var line in File.ReadLines(zoneLogPath))
-        //    {
-        //        OnZoneLineRead(line);
-        //    }
-        //}
 
         var trailing = _parser.FlushPending();
         if (trailing is not null)

@@ -127,6 +127,7 @@ public sealed class GameStateApplier
                     var id = ResolveId(tagChange.Entity);
                     if (id is null)
                     {
+                        Console.WriteLine($"[diag] unresolved Entity={tagChange.Entity.RawToken} {tagChange.TagName}={tagChange.RawValue}");
                         // Pairing is often logged as Entity=YourName#1234. If we haven't
                         // mapped that token yet, still apply it to the friendly player.
                         TryApplyUnresolvedPairingTag(tagChange);
