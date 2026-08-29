@@ -1,3 +1,5 @@
+using System.Text;
+
 namespace HSBGTracker.Core.LogParsing;
 
 /// <summary>
@@ -46,12 +48,7 @@ public sealed class LogFileTailer : IDisposable
     private void Poll()
     {
         if (Interlocked.CompareExchange(ref _isPolling, 1, 0) != 0)
-        {
-            // Previous poll is still processing a burst - skip this tick rather than
-            // run concurrently with it. Position only advances after lines are
-            // actually read, so nothing is lost, it's just picked up next tick.
             return;
-        }
 
         try
         {
@@ -60,57 +57,80 @@ public sealed class LogFileTailer : IDisposable
 
             if (resolved != _path)
             {
-                // Target file changed (e.g. new Hearthstone_<timestamp> session folder after
-                // a reconnect) - switch to it and read it from the beginning, since it's a
-                // brand-new log we haven't seen any of yet.
                 _path = resolved;
                 _position = 0;
+                _remainder = "";
                 PathChanged?.Invoke(resolved);
             }
 
-            if (!File.Exists(_path)) return;
+            if (_path is null || !File.Exists(_path)) return;
 
-            using var stream = new FileStream(_path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+            using var stream = new FileStream(
+                _path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
 
-            // Hearthstone truncates/rewrites Power.log on client restart - if the file is
-            // now shorter than our last read position, start over from the beginning.
             if (stream.Length < _position)
+            {
                 _position = 0;
+                _remainder = "";
+            }
+
+            if (stream.Length == _position)
+                return;
 
             stream.Seek(_position, SeekOrigin.Begin);
-            using var reader = new StreamReader(stream);
-            string? line;
-            while ((line = reader.ReadLine()) is not null)
+
+            // Read only the new slice; do not use StreamReader for position tracking.
+            var toRead = stream.Length - _position;
+            if (toRead > int.MaxValue) toRead = int.MaxValue;
+            var buffer = new byte[toRead];
+            var read = stream.Read(buffer, 0, buffer.Length);
+            if (read <= 0) return;
+
+            var text = Encoding.UTF8.GetString(buffer, 0, read);
+
+            // Keep a trailing partial line until a newline arrives.
+            _remainder += text;
+
+            var parts = _remainder.Split('\n');
+            // If the chunk did not end with \n, last element is incomplete.
+            var completeCount = _remainder.EndsWith('\n') ? parts.Length : parts.Length - 1;
+            if (!_remainder.EndsWith('\n') && parts.Length > 0)
+                _remainder = parts[^1];
+            else
+                _remainder = "";
+
+            for (var i = 0; i < completeCount; i++)
             {
-                // Advance position for this line up front, and catch any exception a
-                // downstream handler (parser/applier) throws while processing it. Without
-                // this, an unhandled exception here would escape into the Timer callback and
-                // silently terminate the process - which looks exactly like "tailing just
-                // stopped" with no error shown, even though the file kept growing.
+                var line = parts[i].TrimEnd('\r');
+                if (line.Length == 0) continue;
                 try
                 {
                     LineRead?.Invoke(line);
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine($"[error] LogFileTailer: failed to process line, skipping it: {ex.Message}");
-                    Console.WriteLine($"[error] Offending line: {line}");
+                    Console.WriteLine($"[error] LogFileTailer line failed: {ex.Message}");
                 }
             }
 
-            _position = stream.Position;
+            // Advance only by what we consumed from the file this poll.
+            _position += read;
         }
         catch (IOException)
         {
-            // File momentarily locked by Hearthstone's own writer - just retry next tick.
+            // HS briefly locking the file — retry next tick.
         }
         catch (Exception ex)
         {
-            // Catch-all so a single bad poll tick (e.g. an unexpected file state) can't
-            // silently kill the Timer thread and stop tailing for the rest of the process.
-            Console.WriteLine($"[error] LogFileTailer.Poll failed unexpectedly: {ex}");
+            Console.WriteLine($"[error] LogFileTailer.Poll: {ex}");
+        }
+        finally
+        {
+            Interlocked.Exchange(ref _isPolling, 0);
         }
     }
+
+    private string _remainder = "";
 
     public void Dispose() => _timer.Dispose();
 }

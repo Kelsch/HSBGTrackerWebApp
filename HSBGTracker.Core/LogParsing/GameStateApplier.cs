@@ -124,6 +124,21 @@ public sealed class GameStateApplier
 
             case TagChangePacket tagChange:
                 {
+                    if (tagChange.TagName.Equals("STATE", StringComparison.OrdinalIgnoreCase)
+                        && tagChange.RawValue.Equals("COMPLETE", StringComparison.OrdinalIgnoreCase)
+                        && (tagChange.Entity.RawToken.Equals("GameEntity", StringComparison.OrdinalIgnoreCase)))
+                    {
+                        if (_state.FriendlyPlayerId is int fid)
+                        {
+                            var p = _state.GetOrCreatePlayer(fid);
+                            if (!p.IsEliminated)
+                            {
+                                var placement = p.PendingLeaderboardPlace ?? p.LeaderboardPlace ?? 0;
+                                _state.MarkEliminated(fid, placement > 0 ? placement : 0);
+                            }
+                        }
+                    }
+
                     var id = ResolveId(tagChange.Entity);
                     if (id is null)
                     {
@@ -202,21 +217,6 @@ public sealed class GameStateApplier
                         var playstate = ParsePlaystate(tagChange.RawValue);
                         if (playstate is int ps)
                             _state.NotifyPlaystateChanged(ownerPlayerId, ps);
-                    }
-
-                    if (tagChange.TagName.Equals("STATE", StringComparison.OrdinalIgnoreCase)
-                        && tagChange.RawValue.Equals("COMPLETE", StringComparison.OrdinalIgnoreCase)
-                        && (tagChange.Entity.RawToken.Equals("GameEntity", StringComparison.OrdinalIgnoreCase)))
-                    {
-                        if (_state.FriendlyPlayerId is int fid)
-                        {
-                            var p = _state.GetOrCreatePlayer(fid);
-                            if (!p.IsEliminated)
-                            {
-                                var placement = p.PendingLeaderboardPlace ?? p.LeaderboardPlace ?? 0;
-                                _state.MarkEliminated(fid, placement > 0 ? placement : 0);
-                            }
-                        }
                     }
 
                     MaybeCaptureHero(entity);
@@ -473,37 +473,50 @@ public sealed class GameStateApplier
     private void TryApplyUnresolvedTerminalTag(TagChangePacket tagChange)
     {
         var token = tagChange.Entity.RawToken;
-        if (string.IsNullOrEmpty(token)) return;
-
-        // Map Bartender Bob → player 10 if we ever see mappings later; ignore for elimination.
+        if (string.IsNullOrWhiteSpace(token)) return;
         if (token.Equals("Bartender Bob", StringComparison.OrdinalIgnoreCase)
-            || token.Equals("Bob", StringComparison.OrdinalIgnoreCase))
+            || token.Equals("Bob", StringComparison.OrdinalIgnoreCase)
+            || token.Equals("GameEntity", StringComparison.OrdinalIgnoreCase))
             return;
 
         int? playerId = null;
 
-        // Prefer already-known friendly BattleTag.
-        if (_state.FriendlyPlayerId is int friendly
-            && _state.ResolvePlayerName(friendly) is string name
-            && name.Equals(token, StringComparison.OrdinalIgnoreCase))
-        {
-            playerId = friendly;
-        }
-        else if (_state.ResolvePlayerEntityIdByName(token) is int entityId)
-        {
+        if (_state.ResolvePlayerEntityIdByName(token) is int entityId)
             playerId = _state.TranslateControllerEntityId(entityId);
-        }
-        else if (_state.FriendlyPlayerId is int onlyFriendly && token.Contains('#'))
+
+        if (playerId is null && token.Contains('#'))
         {
-            // Last resort while catching up / partial state: assume the local
-            // BattleTag is the friendly player.
-            playerId = onlyFriendly;
-            if (_state.TranslatePlayerIdToEntityId(onlyFriendly) is int eid)
-                _state.RegisterPlayerName(token, eid);
+            // Prefer already-known friendly
+            if (_state.FriendlyPlayerId is int friendly)
+            {
+                playerId = friendly;
+                if (_state.TranslatePlayerIdToEntityId(friendly) is int eid)
+                    _state.RegisterPlayerName(token, eid);
+            }
+            else
+            {
+                // Last resort: first non-Bob player mapping
+                foreach (var (eid, pid1) in GetPlayerMappings())
+                {
+                    if (pid1 == 10) continue;
+                    _state.RegisterPlayerName(token, eid);
+                    playerId = pid1;
+                    // If we still don't know friendly, treat this BattleTag as friendly
+                    // (local client only emits its own BattleTag on PLAYSTATE in practice).
+                    if (_state.FriendlyPlayerId is null)
+                        _state.FriendlyPlayerId = pid1;
+                    break;
+                }
+            }
         }
 
         if (playerId is not int pid || pid == 0 || pid == 10)
+        {
+            Console.WriteLine($"[diag] terminal tag ignored (no playerId): {token} {tagChange.TagName}={tagChange.RawValue}");
             return;
+        }
+
+        Console.WriteLine($"[diag] unresolved terminal → player {pid}: {tagChange.TagName}={tagChange.RawValue}");
 
         if (tagChange.TagName.Equals(nameof(GameTag.PLAYSTATE), StringComparison.OrdinalIgnoreCase))
         {
