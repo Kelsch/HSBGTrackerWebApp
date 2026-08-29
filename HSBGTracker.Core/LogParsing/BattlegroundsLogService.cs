@@ -39,15 +39,31 @@ public sealed class BattlegroundsLogService : IDisposable
     {
         _applier = new GameStateApplier(State);
 
-        if (startLiveTailing)
+        if (startLiveTailing && _tailer is not null)
         {
-            _tailer = powerLogPath is not null
-                ? new LogFileTailer(powerLogPath)
-                : hearthstoneInstallPath is not null
-                    ? new LogFileTailer(() => LogConfigWriter.FindLatestSessionPowerLog(hearthstoneInstallPath) ?? LogConfigWriter.DefaultPowerLogPath)
-                    : new LogFileTailer(LogConfigWriter.DefaultPowerLogPath);
+            // Resolve path once so we can backfill.
+            var path = powerLogPath
+                ?? (hearthstoneInstallPath is not null
+                    ? LogConfigWriter.FindLatestSessionPowerLog(hearthstoneInstallPath)
+                    : null)
+                ?? LogConfigWriter.DefaultPowerLogPath;
+
+            if (path is not null && File.Exists(path))
+            {
+                Console.WriteLine($"[tracking] Catching up on existing log: {path}");
+                ReplayFile(path);   // uses OnLineRead → full state build
+                                    // Tailer was started with startAtEndOfFile=true, so it will only
+                                    // deliver *new* lines from here on. Position is already at EOF.
+            }
+
             _tailer.LineRead += OnLineRead;
-            _tailer.PathChanged += path => Console.WriteLine($"[diagnostic] Now tailing: {path}");
+            _tailer.PathChanged += path =>
+            {
+                Console.WriteLine($"[diagnostic] Now tailing: {path}");
+                // New session folder after reconnect → full replay of the new file.
+                if (File.Exists(path))
+                    ReplayFile(path);
+            };
         }
     }
 

@@ -131,6 +131,7 @@ public sealed class GameStateApplier
                         // Pairing is often logged as Entity=YourName#1234. If we haven't
                         // mapped that token yet, still apply it to the friendly player.
                         TryApplyUnresolvedPairingTag(tagChange);
+                        TryApplyUnresolvedTerminalTag(tagChange);
                         break;
                     }
 
@@ -201,6 +202,21 @@ public sealed class GameStateApplier
                         var playstate = ParsePlaystate(tagChange.RawValue);
                         if (playstate is int ps)
                             _state.NotifyPlaystateChanged(ownerPlayerId, ps);
+                    }
+
+                    if (tagChange.TagName.Equals("STATE", StringComparison.OrdinalIgnoreCase)
+                        && tagChange.RawValue.Equals("COMPLETE", StringComparison.OrdinalIgnoreCase)
+                        && (tagChange.Entity.RawToken.Equals("GameEntity", StringComparison.OrdinalIgnoreCase)))
+                    {
+                        if (_state.FriendlyPlayerId is int fid)
+                        {
+                            var p = _state.GetOrCreatePlayer(fid);
+                            if (!p.IsEliminated)
+                            {
+                                var placement = p.PendingLeaderboardPlace ?? p.LeaderboardPlace ?? 0;
+                                _state.MarkEliminated(fid, placement > 0 ? placement : 0);
+                            }
+                        }
                     }
 
                     MaybeCaptureHero(entity);
@@ -452,6 +468,54 @@ public sealed class GameStateApplier
             $"[diagnostic] Unresolved Entity={tagChange.Entity.RawToken} " +
             $"{tagChange.TagName}={opponentId} -> friendly player {friendlyId}");
         _state.NotifyOpponentPaired(friendlyId, opponentId);
+    }
+
+    private void TryApplyUnresolvedTerminalTag(TagChangePacket tagChange)
+    {
+        var token = tagChange.Entity.RawToken;
+        if (string.IsNullOrEmpty(token)) return;
+
+        // Map Bartender Bob → player 10 if we ever see mappings later; ignore for elimination.
+        if (token.Equals("Bartender Bob", StringComparison.OrdinalIgnoreCase)
+            || token.Equals("Bob", StringComparison.OrdinalIgnoreCase))
+            return;
+
+        int? playerId = null;
+
+        // Prefer already-known friendly BattleTag.
+        if (_state.FriendlyPlayerId is int friendly
+            && _state.ResolvePlayerName(friendly) is string name
+            && name.Equals(token, StringComparison.OrdinalIgnoreCase))
+        {
+            playerId = friendly;
+        }
+        else if (_state.ResolvePlayerEntityIdByName(token) is int entityId)
+        {
+            playerId = _state.TranslateControllerEntityId(entityId);
+        }
+        else if (_state.FriendlyPlayerId is int onlyFriendly && token.Contains('#'))
+        {
+            // Last resort while catching up / partial state: assume the local
+            // BattleTag is the friendly player.
+            playerId = onlyFriendly;
+            if (_state.TranslatePlayerIdToEntityId(onlyFriendly) is int eid)
+                _state.RegisterPlayerName(token, eid);
+        }
+
+        if (playerId is not int pid || pid == 0 || pid == 10)
+            return;
+
+        if (tagChange.TagName.Equals(nameof(GameTag.PLAYSTATE), StringComparison.OrdinalIgnoreCase))
+        {
+            var ps = ParsePlaystate(tagChange.RawValue);
+            if (ps is int playstate)
+                _state.NotifyPlaystateChanged(pid, playstate);
+        }
+        else if (tagChange.TagName.Equals(nameof(GameTag.PLAYER_LEADERBOARD_PLACE), StringComparison.OrdinalIgnoreCase)
+                 && int.TryParse(tagChange.RawValue, out var place))
+        {
+            _state.NotifyLeaderboardPlaceChanged(pid, place);
+        }
     }
 
     private static bool IsBoardRelevantTag(string tagName) =>
