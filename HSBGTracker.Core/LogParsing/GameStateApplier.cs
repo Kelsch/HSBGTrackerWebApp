@@ -25,10 +25,6 @@ public sealed class GameStateApplier
                 _state.Reset();
                 break;
 
-            case PlayerNamePacket namePkt:
-                _state.RegisterPlayerDisplayName(namePkt.PlayerId, namePkt.Name);
-                break;
-
             case FullEntityPacket full:
                 {
                     var entity = _state.GetOrCreateEntity(full.EntityId);
@@ -36,26 +32,13 @@ public sealed class GameStateApplier
                         entity.CardId = full.CardId;
 
                     foreach (var (tagName, rawValue) in full.Tags)
-                    {
                         ApplyTag(entity, tagName, rawValue);
-                    }
 
-                    // Resolve CONTROLLER first
-                    if (entity.HasTag(GameTag.CONTROLLER))
+                    if (entity.IsMinionOnBoard)
                     {
-                        var rawController = entity.GetTag(GameTag.CONTROLLER);
-                        var resolved = _state.TranslateControllerEntityId(rawController) ?? rawController;
-                        entity.SetTag(GameTag.CONTROLLER, resolved);
+                        _state.RefreshLastKnownBoard(entity.ControllerPlayerId);
                     }
-
-                    TryUpdatePreCombatOpponentBoard();
-
-                    MaybeCaptureTavernTier(entity);
-                    MaybeCaptureHero(entity);
-                    MaybeCaptureOpponent(entity);
-                    MaybeRefreshBoard(entity);
-
-                    if (entity.AttachedToEntityId != 0
+                    else if (entity.AttachedToEntityId != 0
                         && _state.Entities.TryGetValue(entity.AttachedToEntityId, out var host)
                         && host.CardType == CardType.MINION)
                     {
@@ -83,26 +66,13 @@ public sealed class GameStateApplier
                         entity.CardId = show.CardId;
 
                     foreach (var (tagName, rawValue) in show.Tags)
-                    {
                         ApplyTag(entity, tagName, rawValue);
-                    }
 
-                    // Resolve CONTROLLER first
-                    if (entity.HasTag(GameTag.CONTROLLER))
+                    if (entity.IsMinionOnBoard)
                     {
-                        var rawController = entity.GetTag(GameTag.CONTROLLER);
-                        var resolved = _state.TranslateControllerEntityId(rawController) ?? rawController;
-                        entity.SetTag(GameTag.CONTROLLER, resolved);
+                        _state.RefreshLastKnownBoard(entity.ControllerPlayerId);
                     }
-
-                    TryUpdatePreCombatOpponentBoard();
-
-                    MaybeCaptureTavernTier(entity);
-                    MaybeCaptureHero(entity);
-                    MaybeCaptureOpponent(entity);
-                    MaybeRefreshBoard(entity);
-
-                    if (entity.AttachedToEntityId != 0
+                    else if (entity.AttachedToEntityId != 0
                         && _state.Entities.TryGetValue(entity.AttachedToEntityId, out var host)
                         && host.CardType == CardType.MINION)
                     {
@@ -122,44 +92,32 @@ public sealed class GameStateApplier
                     break;
                 }
 
+            case PlayerNamePacket playerName:
+                {
+                    // Only your own PlayerName carries a "#1234" BattleTag suffix - opponents
+                    // are printed as a bare display name. This is available within the first
+                    // handful of lines of the game, well before any hand/zone reveal.
+                    if (playerName.PlayerName.Contains('#', StringComparison.Ordinal))
+                    {
+                        _state.FriendlyPlayerId = playerName.PlayerId;
+                    }
+                    break;
+                }
+
             case TagChangePacket tagChange:
                 {
-                    if (tagChange.TagName.Equals("STATE", StringComparison.OrdinalIgnoreCase)
-                        && tagChange.RawValue.Equals("COMPLETE", StringComparison.OrdinalIgnoreCase)
-                        && (tagChange.Entity.RawToken.Equals("GameEntity", StringComparison.OrdinalIgnoreCase)))
-                    {
-                        if (_state.FriendlyPlayerId is int fid)
-                        {
-                            var p = _state.GetOrCreatePlayer(fid);
-                            if (!p.IsEliminated)
-                            {
-                                var placement = p.PendingLeaderboardPlace ?? p.LeaderboardPlace ?? 0;
-                                _state.MarkEliminated(fid, placement > 0 ? placement : 0);
-                            }
-                        }
-                    }
-
                     var id = ResolveId(tagChange.Entity);
                     if (id is null)
                     {
-                        Console.WriteLine($"[diag] unresolved Entity={tagChange.Entity.RawToken} {tagChange.TagName}={tagChange.RawValue}");
-                        // Pairing is often logged as Entity=YourName#1234. If we haven't
-                        // mapped that token yet, still apply it to the friendly player.
-                        TryApplyUnresolvedPairingTag(tagChange);
-                        TryApplyUnresolvedTerminalTag(tagChange);
+                        // First time we see a bare BattleTag, learn the mapping if this tag
+                        // change itself is on a known player entity id... we can't. Instead
+                        // learn names when we see Entity=Name attached to known player entity
+                        // via other paths. For named tokens we still try name table below.
                         break;
                     }
 
                     var entity = _state.GetOrCreateEntity(id.Value);
                     ApplyTag(entity, tagChange.TagName, tagChange.RawValue);
-
-                    // Refresh boards when something important about a minion changes
-                    if (IsBoardRelevantTag(tagChange.TagName))
-                    {
-                        MaybeRefreshBoard(entity);
-                    }
-
-                    TryUpdatePreCombatOpponentBoard();
 
                     // CONTROLLER's raw value is a Player EntityID, not a PlayerID - translate it.
                     if (tagChange.TagName == nameof(GameTag.CONTROLLER)
@@ -179,7 +137,11 @@ public sealed class GameStateApplier
                     if (!entity.HasTag(GameTag.CONTROLLER) && tagChange.Entity.PlayerId is int bracketPlayer)
                         entity.SetTag(GameTag.CONTROLLER, bracketPlayer);
 
-                    if (entity.AttachedToEntityId != 0
+                    if (entity.IsMinionOnBoard)
+                    {
+                        _state.RefreshLastKnownBoard(entity.ControllerPlayerId);
+                    }
+                    else if (entity.AttachedToEntityId != 0
                         && _state.Entities.TryGetValue(entity.AttachedToEntityId, out var host)
                         && host.CardType == CardType.MINION)
                     {
@@ -189,21 +151,6 @@ public sealed class GameStateApplier
                     TagChanged?.Invoke(id.Value, tagChange.TagName, tagChange.RawValue);
 
                     var ownerPlayerId = ResolveOwnerPlayerId(entity, tagChange.Entity);
-
-                    if (tagChange.TagName == nameof(GameTag.PLAYER_TECH_LEVEL)
-                        && int.TryParse(tagChange.RawValue, out var tavernTier)
-                        && ownerPlayerId != 0)
-                    {
-                        _state.NotifyTavernTierChanged(ownerPlayerId, tavernTier);
-                    }
-
-                    if ((tagChange.TagName == nameof(GameTag.NEXT_OPPONENT_PLAYER_ID)
-                         || tagChange.TagName == nameof(GameTag.LAST_OPPONENT_PLAYER_ID))
-                        && int.TryParse(tagChange.RawValue, out var opponentId)
-                        && ownerPlayerId != 0)
-                    {
-                        _state.NotifyOpponentPaired(ownerPlayerId, opponentId);
-                    }
 
                     if (tagChange.TagName == nameof(GameTag.PLAYER_LEADERBOARD_PLACE)
                         && int.TryParse(tagChange.RawValue, out var place)
@@ -219,167 +166,68 @@ public sealed class GameStateApplier
                             _state.NotifyPlaystateChanged(ownerPlayerId, ps);
                     }
 
-                    MaybeCaptureHero(entity);
-                    MaybeRefreshBoard(entity);
+                    // "PlayerID=X, PlayerName=Y" only tells us the friendly player's PlayerID -
+                    // the actual hero they picked is a *different* entity from the permanent
+                    // hero-placeholder one (see BattlegroundsLogService docs), linked to it via
+                    // this tag. Confirmed against a real captured game: the placeholder's own
+                    // CardId never changes from "TB_BaconShop_HERO_PH".
+                    if (tagChange.TagName == nameof(GameTag.LINKED_ENTITY)
+                        && int.TryParse(tagChange.RawValue, out var linkedId)
+                        && _state.Entities.TryGetValue(linkedId, out var linkedEntity)
+                        && linkedEntity.CardType == CardType.HERO
+                        && ownerPlayerId != 0)
+                    {
+                        var player = _state.GetOrCreatePlayer(ownerPlayerId);
+                        player.HeroCardId = entity.CardId;
+                        // Store *this* entity's id (the named, carded hero, e.g. "Dancin' Deryl")
+                        // - not linkedId (the anonymous permanent placeholder). Later tags like
+                        // PLAYER_TECH_LEVEL are reported against this named entity, and gating
+                        // against it is what filters out combat-simulation ghost entities below.
+                        player.HeroEntityId = entity.Id;
+                    }
+
+                    // PLAYER_TECH_LEVEL is reported on the hero entity itself (bracket
+                    // player=X), not on the Player entity. But it suffers the same ghost-entity
+                    // problem as hero power: Battlegrounds' combat simulation briefly relabels
+                    // OTHER heroes under your own PlayerID mid-round (confirmed against a real
+                    // game - "Bru'kan", "Dinotamer Brann" etc. all appeared bracketed player=8
+                    // with garbage tier=0 values partway through unrelated combat rounds). Only
+                    // trust this once we know which entity is really your hero (via
+                    // LINKED_ENTITY above), and only from that entity.
+                    if (tagChange.TagName == nameof(GameTag.PLAYER_TECH_LEVEL)
+                        && int.TryParse(tagChange.RawValue, out var techLevel)
+                        && ownerPlayerId != 0)
+                    {
+                        var player = _state.GetOrCreatePlayer(ownerPlayerId);
+                        if (player.HeroEntityId == 0 || id.Value == player.HeroEntityId)
+                        {
+                            player.TavernTier = techLevel;
+                        }
+                    }
 
                     break;
                 }
 
-            case BlockStartPacket block:
-                if (block.BlockType.Equals("ATTACK", StringComparison.OrdinalIgnoreCase))
-                {
-                    _state.MarkCombatStarted();   // lock the snapshot
-                }
-                break;
-
+            case BlockStartPacket:
             case BlockEndPacket:
                 break;
-        }
-    }
-
-    private void TryUpdatePreCombatOpponentBoard()
-    {
-        if (_state.CurrentOpponentPlayerId is not int oppId) return;
-        if (_state.FriendlyPlayerId is not int friendlyId) return;
-        if (_state.CombatHasStarted) return;          // already locked
-
-        var opponentMinions = _state.Entities.Values
-            .Where(e => e.CardType == CardType.MINION
-                     && e.Zone == Zone.PLAY
-                     && e.ControllerPlayerId != friendlyId)
-            .OrderBy(e => e.ZonePosition)
-            .Select(e => e.Clone())
-            .ToList();
-
-        if (opponentMinions.Count > 0)
-        {
-            _state.SetCombatBoard(oppId, opponentMinions);
         }
     }
 
     private int ResolveOwnerPlayerId(Entity entity, EntityRef entityRef)
     {
         if (entity.ControllerPlayerId != 0)
-        {
             return entity.ControllerPlayerId;
-        }
 
         if (entityRef.PlayerId is int bracket)
-        {
             return bracket;
-        }
 
         // Player entity itself: CONTROLLER was set from PlayerMappingPacket to PlayerID.
         if (_state.TranslateControllerEntityId(entity.Id) is int mapped)
-        {
             return mapped;
-        }
 
         return 0;
     }
-
-    private void MaybeCaptureTavernTier(Entity entity)
-    {
-        var tier = entity.GetTag(GameTag.PLAYER_TECH_LEVEL);
-        if (tier <= 0)
-        {
-            return;
-        }
-
-        var playerId = ResolveOwnerFromEntity(entity);
-        if (playerId == 0)
-        {
-            return;
-        }
-
-        _state.NotifyTavernTierChanged(playerId, tier);
-    }
-
-    private void MaybeCaptureOpponent(Entity entity)
-    {
-        var opponentId = entity.GetTag(GameTag.NEXT_OPPONENT_PLAYER_ID);
-        if (opponentId == 0)
-            opponentId = entity.GetTag(GameTag.LAST_OPPONENT_PLAYER_ID);
-        if (opponentId == 0)
-            return;
-
-        var playerId = ResolveOwnerFromEntity(entity);
-        if (playerId == 0)
-            return;
-
-        _state.NotifyOpponentPaired(playerId, opponentId);
-    }
-
-    private void MaybeCaptureHero(Entity entity)
-    {
-        var isHero = entity.CardType == CardType.HERO
-            || (entity.CardId is not null
-                && entity.CardId.Contains("BaconShop_HERO", StringComparison.OrdinalIgnoreCase));
-        if (!isHero || string.IsNullOrEmpty(entity.CardId))
-            return;
-
-        var playerId = ResolveOwnerFromEntity(entity);
-        if (playerId == 0 || playerId == 10)
-            return;
-
-        var player = _state.GetOrCreatePlayer(playerId);
-        player.HeroEntityId = entity.Id;
-
-        if (IsBaconPlaceholderHero(entity.CardId)
-            && !string.IsNullOrEmpty(player.HeroCardId)
-            && !IsBaconPlaceholderHero(player.HeroCardId))
-        {
-            return;
-        }
-
-        player.HeroCardId = entity.CardId;
-    }
-
-    //private void MaybeRefreshOpponentBoard(Entity entity)
-    //{
-    //    if (entity.CardType != CardType.MINION || entity.Zone != Zone.PLAY)
-    //        return;
-
-    //    var controller = entity.ControllerPlayerId;
-    //    if (controller != 0 && controller == _state.CurrentOpponentPlayerId)
-    //        _state.RefreshLastKnownBoard(controller, onlyIfRicher: true);
-    //}
-
-    private void MaybeRefreshBoard(Entity entity)
-    {
-        // Only care about real minions that are (or just were) on a board
-        if (entity.CardType != CardType.MINION)
-            return;
-
-        var controller = entity.ControllerPlayerId;
-        if (controller == 0)
-            return;
-
-        // Always keep the friendly board up to date
-        if (controller == _state.FriendlyPlayerId)
-        {
-            _state.RefreshLastKnownBoard(controller);
-            return;
-        }
-
-        // Keep the current opponent (and the last known opponent) up to date
-        if (controller == _state.CurrentOpponentPlayerId
-            || controller == _state.LastOpponentPlayerId)
-        {
-            _state.RefreshLastKnownBoard(controller, onlyIfRicher: true);
-        }
-    }
-
-    private int ResolveOwnerFromEntity(Entity entity)
-    {
-        if (entity.ControllerPlayerId != 0)
-            return entity.ControllerPlayerId;
-        return _state.TranslateControllerEntityId(entity.Id) ?? 0;
-    }
-
-    private static bool IsBaconPlaceholderHero(string? cardId) =>
-        !string.IsNullOrEmpty(cardId)
-        && cardId.Contains("KelThuzad", StringComparison.OrdinalIgnoreCase);
 
     /// <summary>
     /// Resolves an EntityRef to a numeric entity id. Handles plain ids, bracketed descriptors,
@@ -389,20 +237,14 @@ public sealed class GameStateApplier
     private int? ResolveId(EntityRef entityRef)
     {
         if (entityRef.Id is int id)
-        {
             return id;
-        }
 
-        if (entityRef.IsNamedToken == false)
-        {
+        if (!entityRef.IsNamedToken)
             return null;
-        }
 
         // Already learned?
         if (_state.ResolvePlayerEntityIdByName(entityRef.RawToken) is int known)
-        {
             return known;
-        }
 
         var token = entityRef.RawToken;
 
@@ -420,30 +262,14 @@ public sealed class GameStateApplier
             return null;
         }
 
-        // BattleTag (Name#1234). Do not assign every # token to the friendly player -
-        // opponent names also appear this way on PLAYSTATE / leaderboard lines.
+        // BattleTag (Name#1234) - local logs only have one real human player entity.
         if (token.Contains('#', StringComparison.Ordinal))
         {
-            //if (_state.FriendlyPlayerId is int friendlyId)
-            //{
-            //    var friendly = _state.GetOrCreatePlayer(friendlyId);
-            //    if (string.IsNullOrWhiteSpace(friendly.DisplayName))
-            //    {
-            //        foreach (var (entityId, playerId) in GetPlayerMappings())
-            //        {
-            //            if (playerId == friendlyId)
-            //            {
-            //                _state.RegisterPlayerName(token, entityId);
-            //                return entityId;
-            //            }
-            //        }
-            //    }
-            //}
+            // Prefer known friendly player; otherwise the only non-Bob PLAYER entity.
             int? targetPlayerId = _state.FriendlyPlayerId;
             foreach (var (entityId, playerId) in GetPlayerMappings())
             {
-                if (playerId == 10)
-                    continue;
+                if (playerId == 10) continue;
                 if (targetPlayerId is null || playerId == targetPlayerId)
                 {
                     _state.RegisterPlayerName(token, entityId);
@@ -455,114 +281,20 @@ public sealed class GameStateApplier
         return _state.ResolvePlayerEntityIdByName(token);
     }
 
-    private void TryApplyUnresolvedPairingTag(TagChangePacket tagChange)
-    {
-        if (!IsOpponentPairingTag(tagChange.TagName))
-            return;
-        if (!int.TryParse(tagChange.RawValue, out var opponentId))
-            return;
-        if (_state.FriendlyPlayerId is not int friendlyId)
-            return;
-
-        Console.WriteLine(
-            $"[diagnostic] Unresolved Entity={tagChange.Entity.RawToken} " +
-            $"{tagChange.TagName}={opponentId} -> friendly player {friendlyId}");
-        _state.NotifyOpponentPaired(friendlyId, opponentId);
-    }
-
-    private void TryApplyUnresolvedTerminalTag(TagChangePacket tagChange)
-    {
-        var token = tagChange.Entity.RawToken;
-        if (string.IsNullOrWhiteSpace(token)) return;
-        if (token.Equals("Bartender Bob", StringComparison.OrdinalIgnoreCase)
-            || token.Equals("Bob", StringComparison.OrdinalIgnoreCase)
-            || token.Equals("GameEntity", StringComparison.OrdinalIgnoreCase))
-            return;
-
-        int? playerId = null;
-
-        if (_state.ResolvePlayerEntityIdByName(token) is int entityId)
-            playerId = _state.TranslateControllerEntityId(entityId);
-
-        if (playerId is null && token.Contains('#'))
-        {
-            // Prefer already-known friendly
-            if (_state.FriendlyPlayerId is int friendly)
-            {
-                playerId = friendly;
-                if (_state.TranslatePlayerIdToEntityId(friendly) is int eid)
-                    _state.RegisterPlayerName(token, eid);
-            }
-            else
-            {
-                // Last resort: first non-Bob player mapping
-                foreach (var (eid, pid1) in GetPlayerMappings())
-                {
-                    if (pid1 == 10) continue;
-                    _state.RegisterPlayerName(token, eid);
-                    playerId = pid1;
-                    // If we still don't know friendly, treat this BattleTag as friendly
-                    // (local client only emits its own BattleTag on PLAYSTATE in practice).
-                    if (_state.FriendlyPlayerId is null)
-                        _state.FriendlyPlayerId = pid1;
-                    break;
-                }
-            }
-        }
-
-        if (playerId is not int pid || pid == 0 || pid == 10)
-        {
-            Console.WriteLine($"[diag] terminal tag ignored (no playerId): {token} {tagChange.TagName}={tagChange.RawValue}");
-            return;
-        }
-
-        Console.WriteLine($"[diag] unresolved terminal → player {pid}: {tagChange.TagName}={tagChange.RawValue}");
-
-        if (tagChange.TagName.Equals(nameof(GameTag.PLAYSTATE), StringComparison.OrdinalIgnoreCase))
-        {
-            var ps = ParsePlaystate(tagChange.RawValue);
-            if (ps is int playstate)
-                _state.NotifyPlaystateChanged(pid, playstate);
-        }
-        else if (tagChange.TagName.Equals(nameof(GameTag.PLAYER_LEADERBOARD_PLACE), StringComparison.OrdinalIgnoreCase)
-                 && int.TryParse(tagChange.RawValue, out var place))
-        {
-            _state.NotifyLeaderboardPlaceChanged(pid, place);
-        }
-    }
-
-    private static bool IsBoardRelevantTag(string tagName) =>
-    tagName.Equals(nameof(GameTag.ZONE), StringComparison.OrdinalIgnoreCase)
-    || tagName.Equals(nameof(GameTag.ZONE_POSITION), StringComparison.OrdinalIgnoreCase)
-    || tagName.Equals(nameof(GameTag.ATK), StringComparison.OrdinalIgnoreCase)
-    || tagName.Equals(nameof(GameTag.HEALTH), StringComparison.OrdinalIgnoreCase)
-    || tagName.Equals(nameof(GameTag.PREMIUM), StringComparison.OrdinalIgnoreCase)
-    || tagName.Equals(nameof(GameTag.TAUNT), StringComparison.OrdinalIgnoreCase)
-    || tagName.Equals(nameof(GameTag.DIVINE_SHIELD), StringComparison.OrdinalIgnoreCase)
-    || tagName.Equals(nameof(GameTag.CONTROLLER), StringComparison.OrdinalIgnoreCase);
-
-    private static bool IsOpponentPairingTag(string tagName) =>
-        tagName.Equals(nameof(GameTag.NEXT_OPPONENT_PLAYER_ID), StringComparison.OrdinalIgnoreCase)
-        || tagName.Equals(nameof(GameTag.LAST_OPPONENT_PLAYER_ID), StringComparison.OrdinalIgnoreCase);
-
     // Expose mappings for ResolveId without making the dictionary public - walk known player entities.
     private IEnumerable<(int EntityId, int PlayerId)> GetPlayerMappings()
     {
         foreach (var entity in _state.Entities.Values)
         {
             if (entity.CardType == CardType.PLAYER && entity.ControllerPlayerId != 0)
-            {
                 yield return (entity.Id, entity.ControllerPlayerId);
-            }
         }
     }
 
     private static int? ParsePlaystate(string rawValue)
     {
         if (int.TryParse(rawValue, out var n))
-        {
             return n;
-        }
 
         // Named values as they appear in Power.log.
         return rawValue.ToUpperInvariant() switch
@@ -581,7 +313,7 @@ public sealed class GameStateApplier
 
     private static void ApplyTag(Entity entity, string tagName, string rawValue)
     {
-        if (int.TryParse(rawValue, out var numericValue) == false)
+        if (!int.TryParse(rawValue, out var numericValue))
         {
             // Named enums for a few non-numeric values
             if (tagName.Equals(nameof(GameTag.ZONE), StringComparison.OrdinalIgnoreCase)
@@ -617,8 +349,6 @@ public sealed class GameStateApplier
         entity.SetExtraTag(tagName, numericValue);
 
         if (Enum.TryParse<GameTag>(tagName, out var tag))
-        {
             entity.SetTag(tag, numericValue);
-        }
     }
 }

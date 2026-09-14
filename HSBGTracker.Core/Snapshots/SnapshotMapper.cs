@@ -23,14 +23,13 @@ public static class SnapshotMapper
         var byHost = attachments.ToLookup(a => a.AttachedToEntityId);
         var trinkets = state.GetTrinkets(playerId);
         var heroPower = state.GetHeroPower(playerId);
-        var hero = state.GetHero(playerId);
 
         return new BoardSnapshot
         {
             PlayerId = playerId,
-            HeroCardId = player.HeroCardId ?? hero?.CardId,
+            HeroCardId = player.HeroCardId,
             HeroPower = heroPower is null ? null : ToHeroPowerSnapshot(heroPower),
-            TavernTier = state.ResolveTavernTier(playerId),
+            TavernTier = player.TavernTier,
             Minions = board.Select(m => ToMinionSnapshot(m, byHost[m.Id])).ToList(),
             Trinkets = trinkets.Select(t => ToTrinketSnapshot(t, byHost[t.Id], cardDb)).ToList(),
         };

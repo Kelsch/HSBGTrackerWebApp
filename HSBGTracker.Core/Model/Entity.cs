@@ -47,6 +47,7 @@ public sealed class Entity
     public int Attack => GetTag(GameTag.ATK);
     public int Health => GetTag(GameTag.HEALTH) - GetTag(GameTag.DAMAGE);
     public int TavernTier => GetTag(GameTag.TECH_LEVEL);
+    public int Creator => GetTag(GameTag.CREATOR);
 
     public int ScriptDataNum1 => GetTag(GameTag.TAG_SCRIPT_DATA_NUM_1);
     public int ScriptDataNum2 => GetTag(GameTag.TAG_SCRIPT_DATA_NUM_2);

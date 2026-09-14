@@ -14,68 +14,25 @@ public sealed class GameState
         {
             if (_friendlyPlayerId == value) return;
             _friendlyPlayerId = value;
-            if (value is int friendlyId)
-            {
-                var player = GetOrCreatePlayer(friendlyId);
-                if (player.LastOpponentPlayerId is int opp)
-                {
-                    LastOpponentPlayerId = opp;
-                    CurrentOpponentPlayerId = player.CurrentOpponentPlayerId;
-                }
-                FriendlyPlayerIdentified?.Invoke(friendlyId);
-            }
+            if (value is not null) FriendlyPlayerIdentified?.Invoke(value.Value);
         }
     }
 
-    /// <summary>Friendly player's current/next combat opponent PlayerID.</summary>
-    public int? CurrentOpponentPlayerId { get; private set; }
-
-    /// <summary>Friendly player's most recent real combat opponent PlayerID.</summary>
-    public int? LastOpponentPlayerId { get; private set; }
-
     public event Action<int>? FriendlyPlayerIdentified;
     public event Action<PlayerState>? PlayerEliminated;
-    /// <summary>Fires when the friendly player is paired for combat (playerId, opponentPlayerId).</summary>
-    public event Action<int, int>? OpponentPaired;
 
     private readonly Dictionary<int, List<Entity>> _lastKnownBoards = new();
     private readonly Dictionary<int, List<Entity>> _lastKnownAttachments = new();
 
-    private int? _combatSnapshotTakenForOpponent;
-    private int? _combatSnapshotOpponent;
-    private bool _combatHasStarted;
-
-    public bool CombatHasStarted => _combatHasStarted;
-
-    public void MarkCombatStarted()
-    {
-        _combatHasStarted = true;
-    }
-
-    public void MarkCombatSnapshotTaken(int opponentPlayerId)
-    {
-        _combatSnapshotTakenForOpponent = opponentPlayerId;
-    }
-
-    public bool HasTakenCombatSnapshot(int opponentPlayerId) =>
-        _combatSnapshotTakenForOpponent == opponentPlayerId;
-
     /// <summary>Call after any tag mutation that could affect board state. Cheap no-op unless
     /// the player currently has minions in PLAY. Clones the live board so the snapshot survives
     /// later combat/end-of-game cleanup that mutates the same entities out of PLAY.</summary>
-    public void RefreshLastKnownBoard(int playerId, bool onlyIfRicher = false)
+    public void RefreshLastKnownBoard(int playerId)
     {
         if (playerId == 0) return;
 
         var board = GetBoard(playerId);
         if (board.Count == 0) return;
-
-        if (onlyIfRicher
-            && _lastKnownBoards.TryGetValue(playerId, out var existing)
-            && existing.Count > board.Count)
-        {
-            return;
-        }
 
         _lastKnownBoards[playerId] = board.Select(e => e.Clone()).ToList();
 
@@ -125,76 +82,15 @@ public sealed class GameState
     {
         if (string.IsNullOrWhiteSpace(name)) return;
         _nameToEntityId[name] = entityId;
-        if (TranslateControllerEntityId(entityId) is int playerId)
-            ApplyDisplayName(playerId, name);
-    }
-
-    public void RegisterPlayerDisplayName(int playerId, string name)
-    {
-        if (playerId == 0 || playerId == 10) return;
-        if (!ApplyDisplayName(playerId, name)) return;
-
-        if (TranslatePlayerIdToEntityId(playerId) is int entityId)
-            _nameToEntityId[name] = entityId;
-    }
-
-    private bool ApplyDisplayName(int playerId, string name)
-    {
-        if (string.IsNullOrWhiteSpace(name)) return false;
-        if (name.Equals("UNKNOWN HUMAN PLAYER", StringComparison.OrdinalIgnoreCase)) return false;
-        if (name.Equals("Bartender Bob", StringComparison.OrdinalIgnoreCase)) return false;
-        if (name.Equals("Bob", StringComparison.OrdinalIgnoreCase)) return false;
-
-        var player = GetOrCreatePlayer(playerId);
-        // Prefer a BattleTag over a hero title if we already have one.
-        if (!string.IsNullOrWhiteSpace(player.DisplayName) && player.DisplayName.Contains('#') && !name.Contains('#'))
-            return false;
-
-        player.DisplayName = name;
-        return true;
     }
 
     public int? TranslateControllerEntityId(int entityId) =>
         _entityIdToPlayerId.TryGetValue(entityId, out var playerId) ? playerId : null;
 
-    public int? TranslatePlayerIdToEntityId(int playerId)
-    {
-        foreach (var (entityId, mapped) in _entityIdToPlayerId)
-        {
-            if (mapped == playerId)
-                return entityId;
-        }
-        return null;
-    }
-
-    /// <summary>If the log used a player EntityID where a PlayerID is expected, translate it.</summary>
-    public int NormalizePlayerId(int id)
-    {
-        if (id == 0) return 0;
-        return TranslateControllerEntityId(id) ?? id;
-    }
-
     /// <summary>Resolve a bare log token (BattleTag, "GameEntity", numeric id already handled
     /// by EntityRef) to a player EntityID.</summary>
     public int? ResolvePlayerEntityIdByName(string name) =>
         _nameToEntityId.TryGetValue(name, out var id) ? id : null;
-
-    public string? ResolvePlayerName(int playerId)
-    {
-        if (playerId == 0) return null;
-
-        var player = GetOrCreatePlayer(playerId);
-        if (!string.IsNullOrWhiteSpace(player.DisplayName))
-            return player.DisplayName;
-
-        foreach (var (name, entityId) in _nameToEntityId)
-        {
-            if (TranslateControllerEntityId(entityId) == playerId)
-                return name;
-        }
-
-        return player.HeroCardId;
-    }
 
     public void Reset()
     {
@@ -202,8 +98,6 @@ public sealed class GameState
         Players.Clear();
         GameId = null;
         FriendlyPlayerId = null;
-        CurrentOpponentPlayerId = null;
-        LastOpponentPlayerId = null;
         _entityIdToPlayerId.Clear();
         _nameToEntityId.Clear();
         _lastKnownBoards.Clear();
@@ -243,165 +137,13 @@ public sealed class GameState
     public Entity? GetHeroPower(int playerId) =>
         Entities.Values.FirstOrDefault(e => e.ControllerPlayerId == playerId && e.CardType == CardType.HERO_POWER);
 
-    public Entity? GetHero(int playerId) =>
-        Entities.Values.FirstOrDefault(e =>
-            e.ControllerPlayerId == playerId
-            && e.CardType == CardType.HERO
-            && !string.IsNullOrEmpty(e.CardId));
-
     /// <summary>
-    /// PLAYER_TECH_LEVEL on the player or hero entity. Tavern never goes down, so keep the high-water mark
-    /// in case end-of-game cleanup writes a 0.
-    /// </summary>
-    public void NotifyTavernTierChanged(int playerId, int tier)
-    {
-        if (playerId == 0 || playerId == 10)
-        {
-            return;
-        }
-        if (tier <= 0)
-        {
-            return;
-        }
-
-        var player = GetOrCreatePlayer(playerId);
-        if (tier > player.TavernTier)
-        {
-            player.TavernTier = tier;
-        }
-    }
-
-    /// <summary>Best-effort read if PlayerState was never updated (tag lived only on an entity).</summary>
-    public int ResolveTavernTier(int playerId)
-    {
-        var player = GetOrCreatePlayer(playerId);
-        if (player.TavernTier > 0)
-        {
-            return player.TavernTier;
-        }
-
-        var fromEntities = 0;
-        foreach (var e in Entities.Values)
-        {
-            if (e.ControllerPlayerId != playerId && TranslateControllerEntityId(e.Id) != playerId)
-            {
-                continue;
-            }
-            if (e.CardType is not (CardType.PLAYER or CardType.HERO))
-            {
-                continue;
-            }
-
-            var tier = e.GetTag(GameTag.PLAYER_TECH_LEVEL);
-            if (tier > fromEntities)
-            {
-                fromEntities = tier;
-            }
-        }
-
-        return fromEntities;
-    }
-
-    /// <summary>
-    /// NEXT_OPPONENT_PLAYER_ID / LAST_OPPONENT_PLAYER_ID. Every lobby player gets this each
-    /// combat; only the friendly player's pairing is promoted to Current/LastOpponentPlayerId.
-    /// </summary>
-    public void NotifyOpponentPaired(int playerId, int opponentRawId)
-    {
-        if (playerId == 0 || playerId == 10) return;
-
-        var opponentPlayerId = NormalizePlayerId(opponentRawId);
-        var player = GetOrCreatePlayer(playerId);
-
-        if (opponentPlayerId <= 0 || opponentPlayerId == 10 || opponentPlayerId == playerId)
-        {
-            player.CurrentOpponentPlayerId = null;
-            if (playerId == FriendlyPlayerId)
-                CurrentOpponentPlayerId = null;
-            return;
-        }
-
-        player.CurrentOpponentPlayerId = opponentPlayerId;
-        player.LastOpponentPlayerId = opponentPlayerId;
-
-        // Capture both boards, but do NOT wipe a previously good cache
-        RefreshLastKnownBoard(playerId);
-        RefreshLastKnownBoard(opponentPlayerId);   // will only overwrite if it finds minions
-
-        // Explicitly remember hero if we already know it
-        var opponent = GetOrCreatePlayer(opponentPlayerId);
-        if (string.IsNullOrEmpty(opponent.HeroCardId))
-        {
-            var hero = GetHero(opponentPlayerId);
-            if (hero?.CardId is not null)
-                opponent.HeroCardId = hero.CardId;
-        }
-
-        var trinkets = GetTrinkets(opponentPlayerId);
-        if (trinkets.Count > 0)
-        {
-            // store them somewhere if you want (you may need a _lastKnownTrinkets dictionary)
-        }
-
-        var liveCount = GetBoard(opponentPlayerId).Count;
-        var cachedCount = _lastKnownBoards.TryGetValue(opponentPlayerId, out var cached) ? cached.Count : 0;
-
-        Console.WriteLine(
-            $"[board-debug] Pairing {playerId} vs {opponentPlayerId} | " +
-            $"live board={liveCount} | cached board={cachedCount}");
-
-        if (playerId == FriendlyPlayerId)
-        {
-            CurrentOpponentPlayerId = opponentPlayerId;
-            LastOpponentPlayerId = opponentPlayerId;
-
-            //_combatSnapshotTakenForOpponent = null;
-            _combatSnapshotOpponent = null;
-            _combatHasStarted = false;
-
-            OpponentPaired?.Invoke(playerId, opponentPlayerId);
-        }
-    }
-
-    public void SetCombatBoard(int opponentPlayerId, List<Entity> board)
-    {
-        if (board.Count == 0) return;
-
-        if (_lastKnownBoards.TryGetValue(opponentPlayerId, out var existing))
-        {
-            // Keep the larger board – the real pre-combat board is almost always bigger
-            // than the later token-only versions.
-            if (existing.Count >= board.Count)
-                return;
-
-            // Optional extra filter – reject boards that are almost pure tokens
-            //var uniqueCards = board.Select(m => m.CardId).Distinct().Count();
-            //if (uniqueCards <= 1 && board.Count > 3)
-            //    return; // probably just a bunch of the same beetle
-        }
-
-        _lastKnownBoards[opponentPlayerId] = board;
-        _combatSnapshotOpponent = opponentPlayerId;
-
-        Console.WriteLine($"[combat-debug] Updated opponent {opponentPlayerId} board → {board.Count} minions");
-    }
-
-    public void SetLastKnownBoard(int playerId, List<Entity> board)
-    {
-        if (playerId == 0 || board.Count == 0) return;
-
-        _lastKnownBoards[playerId] = board;
-
-        var boardIds = board.Select(e => e.Id).ToHashSet();
-        _lastKnownAttachments[playerId] = Entities.Values
-            .Where(e => e.AttachedToEntityId != 0 && boardIds.Contains(e.AttachedToEntityId))
-            .Select(e => e.Clone())
-            .ToList();
-    }
-
-    /// <summary>
-    /// While alive this is current standing (noisy). After the run ends, BG often
-    /// still writes the final place a moment later - keep accepting those updates.
+    /// While alive this is current standing (noisy) - Battlegrounds recalculates the whole
+    /// lobby's placements in a burst every time anyone is knocked out, and confirmed against
+    /// a real captured game, the local player's own final correction can land a moment *after*
+    /// their PLAYSTATE flips to WON/LOST. So: before elimination, just track the latest value;
+    /// after PLAYSTATE has fired, keep refining LeaderboardPlace as later corrections arrive;
+    /// and if PLAYSTATE fired before any place was known at all, this is what finalizes it.
     /// </summary>
     public void NotifyLeaderboardPlaceChanged(int playerId, int place)
     {
@@ -411,15 +153,22 @@ public sealed class GameState
         var player = GetOrCreatePlayer(playerId);
         player.PendingLeaderboardPlace = place;
 
-        // Refine confirmed place after PLAYSTATE already fired.
         if (player.IsEliminated)
-            player.LeaderboardPlace = place;
+        {
+            player.LeaderboardPlace = place; // refine confirmed place after the fact
+        }
+        else if (player.HasFinishedPlaying)
+        {
+            // PLAYSTATE already flipped but had no place to report yet - this is it.
+            MarkEliminated(playerId, place);
+        }
     }
 
     /// <summary>
-    /// PLAYSTATE is the real end-of-run signal for the local player. LOST/WON (and CONCEDED)
-    /// freeze the board; placement keeps updating from later PLAYER_LEADERBOARD_PLACE tags
-    /// until finalize/upload reads the latest value.
+    /// PLAYSTATE is the real end-of-run signal for a player. LOST/WON (and CONCEDED) freeze
+    /// the board. If a placement is already known, finalize immediately (later
+    /// PLAYER_LEADERBOARD_PLACE corrections still get applied via NotifyLeaderboardPlaceChanged
+    /// above); otherwise wait for the first PLAYER_LEADERBOARD_PLACE tag to arrive.
     /// </summary>
     public void NotifyPlaystateChanged(int playerId, int playstate)
     {
@@ -433,15 +182,16 @@ public sealed class GameState
             return;
 
         var player = GetOrCreatePlayer(playerId);
-        if (player.IsEliminated) return;
+        if (player.IsEliminated || player.HasFinishedPlaying) return;
 
-        // Snapshot standing now; later PLAYER_LEADERBOARD_PLACE may refine it.
+        player.HasFinishedPlaying = true;
+
         var place = player.PendingLeaderboardPlace
             ?? (playstate == Won ? 1 : 0);
 
-        //if (place <= 0) return;
-
-        MarkEliminated(playerId, place);
+        if (place > 0)
+            MarkEliminated(playerId, place);
+        // else: NotifyLeaderboardPlaceChanged will finalize as soon as a real place arrives.
     }
 
     public void MarkEliminated(int playerId, int place)

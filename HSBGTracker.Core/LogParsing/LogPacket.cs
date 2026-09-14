@@ -53,17 +53,19 @@ public sealed class PlayerMappingPacket : LogPacket
     }
 }
 
-/// <summary>From GameState.DebugPrintGame() - PlayerID=N, PlayerName=Name#1234.
-/// Opponent BattleTags often appear here even when Power TAG_CHANGEs only name the local player.</summary>
+/// <summary>From "GameState.DebugPrintGame() - PlayerID=8, PlayerName=DalTron#11868" at game
+/// start. This is the most reliable friendly-player signal available: Battlegrounds only
+/// reveals your own BattleTag (the "#1234" suffix) here - every other player's PlayerName is
+/// a bare display name. Confirmed against a real captured Battlegrounds Power.log.</summary>
 public sealed class PlayerNamePacket : LogPacket
 {
     public int PlayerId { get; }
-    public string Name { get; }
+    public string PlayerName { get; }
 
-    public PlayerNamePacket(int playerId, string name)
+    public PlayerNamePacket(int playerId, string playerName)
     {
         PlayerId = playerId;
-        Name = name;
+        PlayerName = playerName;
     }
 }
 
